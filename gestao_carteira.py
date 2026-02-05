@@ -1,6 +1,9 @@
 import streamlit as st
 import pandas as pd
-import gspread
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseDownload
+import io
 import json
 import os
 
@@ -90,19 +93,50 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# 2. DADOS E TRATAMENTO (GOOGLE SHEETS)
+# 2. DADOS E TRATAMENTO (GOOGLE DRIVE .XLSX)
 # ---------------------------------------------------------
 @st.cache_data(ttl=60)
 def load_data():
     try:
-        gc = gspread.service_account_from_dict(st.secrets["gcp_service_account"])
-        sh = gc.open("dados_dashboard_obras") 
-        worksheet = sh.sheet1
-        dados = worksheet.get_all_records()
-        df = pd.DataFrame(dados)
+        # Autenticação via Secrets
+        creds_dict = dict(st.secrets["gcp_service_account"])
+        creds = service_account.Credentials.from_service_account_info(
+            creds_dict,
+            scopes=['https://www.googleapis.com/auth/drive.readonly']
+        )
+        
+        service = build('drive', 'v3', credentials=creds)
+        
+        # Procura o arquivo pelo nome
+        results = service.files().list(
+            q="name='dados_dashboard_obras.xlsx' and trashed=false",
+            fields="files(id, name)"
+        ).execute()
+        files = results.get('files', [])
+        
+        if not files:
+            st.error("Arquivo 'dados_dashboard_obras.xlsx' não encontrado no Google Drive. Verifique se ele foi compartilhado com o e-mail da conta de serviço.")
+            return None
+            
+        file_id = files[0]['id']
+        
+        # Baixa o arquivo para a memória
+        request = service.files().get_media(fileId=file_id)
+        file_io = io.BytesIO()
+        downloader = MediaIoBaseDownload(file_io, request)
+        
+        done = False
+        while done is False:
+            status, done = downloader.next_chunk()
+            
+        file_io.seek(0)
+        
+        # Lê como Excel
+        df = pd.read_excel(file_io)
         return df
+
     except Exception as e:
-        st.error(f"Erro na conexão com o Google Sheets: {e}")
+        st.error(f"Erro na conexão com o Google Drive: {e}")
         return None
 
 df_raw = load_data()
@@ -408,5 +442,4 @@ for i, (index, row) in enumerate(df_show.iterrows()):
             with col_btn:
                 if st.button("Abrir ↗", key=f"btn_{row['Projeto']}", use_container_width=True):
                     st.session_state["projeto_foco"] = row['Projeto']
-                    # ATUALIZAÇÃO AQUI: Redirecionando para o nome novo
                     st.switch_page("painel_obra.py")
