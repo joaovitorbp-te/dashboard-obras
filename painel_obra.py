@@ -1,7 +1,10 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-import gspread
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseDownload
+import io
 import json
 import os
 
@@ -75,7 +78,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# FUNÇÕES E DADOS (GOOGLE SHEETS)
+# FUNÇÕES E DADOS (GOOGLE DRIVE .XLSX)
 # ---------------------------------------------------------
 def format_currency(value):
     if pd.isna(value): return "R$ 0,00"
@@ -88,11 +91,34 @@ def format_percent(value):
 @st.cache_data(ttl=60)
 def load_data():
     try:
-        gc = gspread.service_account_from_dict(st.secrets["gcp_service_account"])
-        sh = gc.open("dados_dashboard_obras") 
-        worksheet = sh.sheet1
-        dados = worksheet.get_all_records()
-        df = pd.DataFrame(dados)
+        creds_dict = dict(st.secrets["gcp_service_account"])
+        creds = service_account.Credentials.from_service_account_info(
+            creds_dict,
+            scopes=['https://www.googleapis.com/auth/drive.readonly']
+        )
+        
+        service = build('drive', 'v3', credentials=creds)
+        
+        results = service.files().list(
+            q="name='dados_dashboard_obras.xlsx' and trashed=false",
+            fields="files(id, name)"
+        ).execute()
+        files = results.get('files', [])
+        
+        if not files:
+            return None
+            
+        file_id = files[0]['id']
+        request = service.files().get_media(fileId=file_id)
+        file_io = io.BytesIO()
+        downloader = MediaIoBaseDownload(file_io, request)
+        
+        done = False
+        while done is False:
+            status, done = downloader.next_chunk()
+            
+        file_io.seek(0)
+        df = pd.read_excel(file_io)
         return df
     except Exception as e:
         return None
