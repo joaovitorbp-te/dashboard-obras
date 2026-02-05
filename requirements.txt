@@ -1,6 +1,10 @@
 streamlit
 pandas
 plotly
-openpyxl
-streamlit-authenticator
 gspread
+streamlit-authenticator
+pyyaml
+openpyxl
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib
