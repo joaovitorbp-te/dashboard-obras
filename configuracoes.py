@@ -3,7 +3,6 @@ import pandas as pd
 import json
 import os
 import gspread
-import time # Adicionado para o delay visual
 
 # ---------------------------------------------------------
 # ESTILO CSS
@@ -133,6 +132,7 @@ with st.container(border=True):
     st.subheader("Status da Conexão")
     st.write("")
     
+    # Substituído st.info por st.markdown direto para evitar bugs visuais
     st.markdown("""
     **☁️ Sistema conectado ao Google Sheets**
     
@@ -143,24 +143,6 @@ with st.container(border=True):
     2. Edite ou cole os novos dados.
     3. As alterações aparecerão aqui automaticamente.
     """)
-    
-    st.write("")
-
-    # --- BOTÃO DE ATUALIZAÇÃO (FORÇA BRUTA) ---
-    if st.button("🔄 Atualizar Dados Agora"):
-        # 1. Limpa o cache
-        st.cache_data.clear()
-        
-        # 2. Mostra mensagem temporária
-        placeholder = st.empty()
-        placeholder.success("✅ Cache limpo! Recarregando sistema...")
-        
-        # 3. Aguarda 1.5s para o usuário ler
-        time.sleep(1.5)
-        
-        # 4. Força o recarregamento da página
-        st.rerun()
-    # ------------------------------------------
     
     st.write("")
     
