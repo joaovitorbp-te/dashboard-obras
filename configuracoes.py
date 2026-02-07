@@ -72,6 +72,12 @@ def save_config(data):
     with open(CONFIG_FILE, "w") as f:
         json.dump(data, f)
 
+# --- CALLBACK DE LIMPEZA DE CACHE ---
+def limpar_cache_geral():
+    st.cache_data.clear()
+    # Adicionamos uma chave na sessão para mostrar a mensagem de sucesso após o reload
+    st.session_state['cache_cleared'] = True
+
 config_atual = load_config()
 
 # ---------------------------------------------------------
@@ -132,7 +138,6 @@ with st.container(border=True):
     st.subheader("Status da Conexão")
     st.write("")
     
-    # Substituído st.info por st.markdown direto para evitar bugs visuais
     st.markdown("""
     **☁️ Sistema conectado ao Google Sheets**
     
@@ -146,12 +151,14 @@ with st.container(border=True):
     
     st.write("")
     
-    # --- BOTÃO DE ATUALIZAÇÃO MANUAL (Configuração Padrão) ---
-    if st.button("Atualizar Dados Agora"):
-        st.cache_data.clear()
-        st.success("✅ Cache limpo! Os dados estão sendo recarregados...")
-        st.rerun()
-    # ---------------------------------------------------------
+    # --- BOTÃO DE ATUALIZAÇÃO COM CALLBACK (CORRIGIDO) ---
+    st.button("Atualizar Dados Agora", on_click=limpar_cache_geral)
+    
+    if st.session_state.get('cache_cleared'):
+        st.success("✅ Cache limpo! Os dados mais recentes foram baixados.")
+        # Removemos a flag para a mensagem não ficar para sempre
+        del st.session_state['cache_cleared']
+    # -----------------------------------------------------
     
     st.write("")
     
