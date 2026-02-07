@@ -136,7 +136,7 @@ with st.container(border=True):
     st.markdown("""
     **☁️ Sistema conectado ao Google Sheets**
     
-    Os dados são atualizados automaticamente a cada 60 segundos.
+    Os dados são atualizados automaticamente a cada 30 segundos.
     
     **Para atualizar os dados:**
     1. Abra a planilha **'dados_dashboard_obras'** no Google Drive.
