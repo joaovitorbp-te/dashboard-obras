@@ -151,15 +151,15 @@ if 'Tipo' not in df_raw.columns:
 else:
     df_raw['Tipo'] = df_raw['Tipo'].replace("", "Não Classificado")
 
-# --- LISTA EXPANDIDA DE IDs ---
-IDS_ADM = [
-    "5009", "5010", "5011", 
-    "5009.0", "5010.0", "5011.0",
-    "5009.2025", "5010.2025", "5011.2025"
-]
+# --- LISTA EXPANDIDA DE IDs (AGORA POR PREFIXO) ---
+PREFIXOS_ADM = ("5009", "5010", "5011")
 
-df_adm = df_raw[df_raw['Projeto'].isin(IDS_ADM)].copy()
-df_obras = df_raw[~df_raw['Projeto'].isin(IDS_ADM)].copy()
+# Filtra tudo que começar com esses números (inclui .2025, .2026, .0, etc.)
+mask_adm = df_raw['Projeto'].str.startswith(PREFIXOS_ADM)
+
+df_adm = df_raw[mask_adm].copy()
+df_obras = df_raw[~mask_adm].copy()
+
 df_finalizadas = df_obras[df_obras['Status'].isin(['Finalizado', 'Apresentado'])].copy()
 
 # --- FUNÇÃO AUXILIAR DE FORMATAÇÃO (BRL) ---
