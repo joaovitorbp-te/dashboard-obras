@@ -145,7 +145,7 @@ if df_raw is None:
     st.stop()
 
 # --- LIMPEZA DE DADOS ---
-# Forçamos a conversão de IDs para String para evitar erro de comparação (5009 vs "5009")
+# Forçamos a conversão de IDs para String para evitar erro de comparação
 df_raw['Projeto'] = df_raw['Projeto'].astype(str)
 
 def clean_google_number(x):
@@ -186,28 +186,32 @@ def format_brl_short(valor):
     else: return f"R$ {valor:,.0f}".replace(",", ".")
 
 # ---------------------------------------------------------
-# 3. LÓGICA DE NEGÓCIO (CORRIGIDA - IGUAL A DADOS & INSIGHTS)
+# 3. LÓGICA DE NEGÓCIO (CORRIGIDA E ROBUSTA)
 # ---------------------------------------------------------
 
-# IDs de Custo Interno (Tratados como Strings)
-IDS_ADM = ["5009.2025", "5010.2025", "5011.2025"]
+# IDs de Custo Interno (Todas as variações possíveis para garantir que pegue do Excel)
+# Isso resolve se o Excel estiver enviando "5009" ou "5009.0" ou "5009.2025"
+IDS_ADM = [
+    "5009", "5010", "5011", 
+    "5009.0", "5010.0", "5011.0",
+    "5009.2025", "5010.2025", "5011.2025"
+]
 
 # Separação dos DataFrames
 df_adm = df_raw[df_raw['Projeto'].isin(IDS_ADM)].copy()
 df_obras = df_raw[~df_raw['Projeto'].isin(IDS_ADM)].copy()
 
-# APLICANDO A MESMA FÓRMULA DE "DADOS & INSIGHTS" (SEM IMPOSTOS)
-# Primeiro garantimos que as colunas são números e zeramos os vazios
+# APLICANDO A MESMA FÓRMULA DE "DADOS & INSIGHTS"
+# 1. Garantir que as colunas são números e zerar os vazios
 cols_soma = ['Mat_Real', 'Desp_Real', 'HH_Real_Vlr']
 for col in cols_soma:
     if col in df_adm.columns:
         df_adm[col] = pd.to_numeric(df_adm[col], errors='coerce').fillna(0)
 
-# Cálculo Exato: Soma das colunas de Custo Real
+# 2. Soma Exata dos custos administrativos (Mat + Desp + HH)
 custo_adm_total = (df_adm['Mat_Real'] + df_adm['Desp_Real'] + df_adm['HH_Real_Vlr']).sum()
 
 # Cálculos Macro (Restante igual)
-# 3. Função auxiliar para custos das obras (linha a linha)
 def get_custo_total_row(row):
     return row['Mat_Real'] + row['Desp_Real'] + row['HH_Real_Vlr'] + row['Impostos']
 
