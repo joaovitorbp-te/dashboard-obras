@@ -115,7 +115,7 @@ def load_data():
         files = results.get('files', [])
         
         if not files:
-            st.error("Arquivo 'dados_dashboard_obras.xlsx' não encontrado no Google Drive. Verifique se ele foi compartilhado com o e-mail da conta de serviço.")
+            st.error("Arquivo 'dados_dashboard_obras.xlsx' não encontrado no Google Drive.")
             return None
             
         file_id = files[0]['id']
@@ -144,7 +144,10 @@ df_raw = load_data()
 if df_raw is None:
     st.stop()
 
-# --- FUNÇÃO DE LIMPEZA ROBUSTA ---
+# --- LIMPEZA DE DADOS ---
+# Forçamos a conversão de IDs para String para evitar erro de comparação (5009 vs "5009")
+df_raw['Projeto'] = df_raw['Projeto'].astype(str)
+
 def clean_google_number(x):
     if isinstance(x, (int, float)):
         return float(x)
@@ -171,12 +174,11 @@ for col in cols_numericas:
     else:
         df_raw[col] = 0.0
 
-# --- FORMATAÇÃO 1: COMPLETA (Para KPIs Grandes) ---
+# --- FORMATAÇÃO ---
 def format_brl_full(valor):
     if pd.isna(valor): return "R$ 0,00"
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-# --- FORMATAÇÃO 2: ABREVIADA (Para Cards de Obras - Espaço Curto) ---
 def format_brl_short(valor):
     if pd.isna(valor): return "R$ 0"
     if valor >= 1_000_000: return f"R$ {valor/1_000_000:.1f}M".replace(".", ",")
@@ -184,13 +186,31 @@ def format_brl_short(valor):
     else: return f"R$ {valor:,.0f}".replace(",", ".")
 
 # ---------------------------------------------------------
-# 3. LÓGICA DE NEGÓCIO
+# 3. LÓGICA DE NEGÓCIO (CORRIGIDA)
 # ---------------------------------------------------------
-IDS_ADM = [5009.2025, 5010.2025, 5011.2025]
+
+# IDs de Custo Interno (Tratados como Strings)
+IDS_ADM = ["5009.2025", "5010.2025", "5011.2025"]
+
+# Separação dos DataFrames
 df_adm = df_raw[df_raw['Projeto'].isin(IDS_ADM)].copy()
 df_obras = df_raw[~df_raw['Projeto'].isin(IDS_ADM)].copy()
 
-def get_custo_total(row):
+# Colunas que compõem o Custo
+cols_custo = ['Mat_Real', 'Desp_Real', 'HH_Real_Vlr', 'Impostos']
+
+# 1. Garantir que as colunas de custo sejam numéricas e preencher vazios com 0
+for col in cols_custo:
+    if col in df_adm.columns:
+        df_adm[col] = pd.to_numeric(df_adm[col], errors='coerce').fillna(0)
+    if col in df_obras.columns:
+        df_obras[col] = pd.to_numeric(df_obras[col], errors='coerce').fillna(0)
+
+# 2. Soma robusta dos custos administrativos (Soma toda a tabela das colunas selecionadas)
+custo_adm_total = df_adm[cols_custo].sum().sum()
+
+# 3. Função auxiliar para custos das obras (linha a linha)
+def get_custo_total_row(row):
     return row['Mat_Real'] + row['Desp_Real'] + row['HH_Real_Vlr'] + row['Impostos']
 
 # Cálculos Macro
@@ -202,20 +222,19 @@ df_concluido = df_obras[df_obras['Status'].isin(['Finalizado', 'Apresentado'])]
 valor_concluido = df_concluido['Vendido'].sum()
 valor_faturado_total = df_obras['Faturado'].sum()
 
-custo_adm_total = df_adm.apply(get_custo_total, axis=1).sum()
 overhead_pct = (custo_adm_total / valor_vendido_total * 100) if valor_vendido_total > 0 else 0
 
 # Cálculos de Margem
 def get_margem_ponderada(df_in):
     if df_in.empty: return 0.0
     venda = df_in['Vendido'].sum()
-    custo = df_in.apply(get_custo_total, axis=1).sum()
+    custo = df_in.apply(get_custo_total_row, axis=1).sum()
     return ((venda - custo) / venda * 100) if venda > 0 else 0
 
 mg_geral = get_margem_ponderada(df_obras)
 mg_concluida = get_margem_ponderada(df_concluido)
 
-custo_obras_total = df_obras.apply(get_custo_total, axis=1).sum()
+custo_obras_total = df_obras.apply(get_custo_total_row, axis=1).sum()
 lucro_bruto_total = valor_vendido_total - custo_obras_total
 lucro_liquido_final = lucro_bruto_total - custo_adm_total
 mg_liquida_pos_adm = (lucro_liquido_final / valor_vendido_total * 100) if valor_vendido_total > 0 else 0
