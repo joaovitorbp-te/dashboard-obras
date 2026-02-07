@@ -161,17 +161,19 @@ for col in cols_numericas:
 # ---------------------------------------------------------
 st.sidebar.markdown("### Seleção de Projeto:") 
 
-lista_projetos = sorted(df_raw['Projeto'].unique())
+lista_projetos = sorted(df_raw['Projeto'].astype(str).unique())
 
 index_padrao = 0
 if "projeto_foco" in st.session_state:
     try:
-        index_padrao = lista_projetos.index(st.session_state["projeto_foco"])
+        index_padrao = lista_projetos.index(str(st.session_state["projeto_foco"]))
     except ValueError:
         index_padrao = 0
 
 id_projeto = st.sidebar.selectbox("Projeto:", lista_projetos, index=index_padrao, label_visibility="collapsed")
 
+# Converter a coluna projeto para string para garantir o match
+df_raw['Projeto'] = df_raw['Projeto'].astype(str)
 dados = df_raw[df_raw['Projeto'] == id_projeto].iloc[0]
 
 # ---------------------------------------------------------
@@ -330,21 +332,28 @@ with st.container(border=True):
     with col_diag:
         saldo_hh = hh_orc - hh_real
         
+        # --- CORREÇÃO DE ERRO: CONVERSÃO SEGURA PARA INT ---
+        try:
+            saldo_hh_int = int(saldo_hh)
+        except:
+            saldo_hh_int = 0
+        # ---------------------------------------------------
+        
         if perc_hh > (dados['Conclusao_%'] + 10):
             border_c = "#da3633" 
             titulo = "Baixa Eficiência"
             texto = "O consumo de horas está desproporcional ao avanço físico."
-            saldo_txt = f"Excedente: {int(hh_real - hh_orc)}h"
+            saldo_txt = f"Excedente: {abs(saldo_hh_int)}h"
         elif perc_hh < dados['Conclusao_%']:
             border_c = "#3fb950"
             titulo = "Alta Eficiência"
             texto = "A obra está avançada economizando horas."
-            saldo_txt = f"Saldo Positivo: {int(saldo_hh)}h"
+            saldo_txt = f"Saldo Positivo: {saldo_hh_int}h"
         else:
             border_c = "#58a6ff"
             titulo = "Equilibrado"
             texto = "O ritmo segue conforme o planejado."
-            saldo_txt = f"Saldo: {int(saldo_hh)}h"
+            saldo_txt = f"Saldo: {saldo_hh_int}h"
 
         st.markdown(f"""
         <div style="background-color: #161b22; border-left: 4px solid {border_c}; padding: 15px; border-radius: 4px;">
@@ -381,7 +390,7 @@ with st.container(border=True):
         connector = {"line":{"color":"#30363d"}},
         decreasing = {"marker":{"color":"#da3633"}}, 
         increasing = {"marker":{"color":"#3fb950"}}, 
-        totals = {"marker":{"color":"#58a6ff"}},       
+        totals = {"marker":{"color":"#58a6ff"}},        
         cliponaxis = False
     ))
     
