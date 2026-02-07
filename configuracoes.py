@@ -145,6 +145,15 @@ with st.container(border=True):
     """)
     
     st.write("")
+
+    # --- BOTÃO DE ATUALIZAÇÃO MANUAL ---
+    if st.button("Atualizar Dados Agora", use_container_width=True):
+        st.cache_data.clear()
+        st.success("✅ Cache limpo! Os dados estão sendo recarregados...")
+        st.rerun()
+    # -----------------------------------
+    
+    st.write("")
     
     # Check de conexão para o usuário ver se está tudo ok
     with st.expander("Verificar dados carregados da nuvem"):
