@@ -82,7 +82,7 @@ META_ADM = float(config["meta_custo_adm"])
 # ---------------------------------------------------------
 # 3. DADOS
 # ---------------------------------------------------------
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=30)
 def load_data():
     try:
         creds_dict = dict(st.secrets["gcp_service_account"])
