@@ -186,7 +186,7 @@ def format_brl_short(valor):
     else: return f"R$ {valor:,.0f}".replace(",", ".")
 
 # ---------------------------------------------------------
-# 3. LÓGICA DE NEGÓCIO (CORRIGIDA)
+# 3. LÓGICA DE NEGÓCIO (CORRIGIDA - IGUAL A DADOS & INSIGHTS)
 # ---------------------------------------------------------
 
 # IDs de Custo Interno (Tratados como Strings)
@@ -196,24 +196,21 @@ IDS_ADM = ["5009.2025", "5010.2025", "5011.2025"]
 df_adm = df_raw[df_raw['Projeto'].isin(IDS_ADM)].copy()
 df_obras = df_raw[~df_raw['Projeto'].isin(IDS_ADM)].copy()
 
-# Colunas que compõem o Custo
-cols_custo = ['Mat_Real', 'Desp_Real', 'HH_Real_Vlr', 'Impostos']
-
-# 1. Garantir que as colunas de custo sejam numéricas e preencher vazios com 0
-for col in cols_custo:
+# APLICANDO A MESMA FÓRMULA DE "DADOS & INSIGHTS" (SEM IMPOSTOS)
+# Primeiro garantimos que as colunas são números e zeramos os vazios
+cols_soma = ['Mat_Real', 'Desp_Real', 'HH_Real_Vlr']
+for col in cols_soma:
     if col in df_adm.columns:
         df_adm[col] = pd.to_numeric(df_adm[col], errors='coerce').fillna(0)
-    if col in df_obras.columns:
-        df_obras[col] = pd.to_numeric(df_obras[col], errors='coerce').fillna(0)
 
-# 2. Soma robusta dos custos administrativos (Soma toda a tabela das colunas selecionadas)
-custo_adm_total = df_adm[cols_custo].sum().sum()
+# Cálculo Exato: Soma das colunas de Custo Real
+custo_adm_total = (df_adm['Mat_Real'] + df_adm['Desp_Real'] + df_adm['HH_Real_Vlr']).sum()
 
+# Cálculos Macro (Restante igual)
 # 3. Função auxiliar para custos das obras (linha a linha)
 def get_custo_total_row(row):
     return row['Mat_Real'] + row['Desp_Real'] + row['HH_Real_Vlr'] + row['Impostos']
 
-# Cálculos Macro
 status_venda = ['Não iniciado', 'Em andamento', 'Finalizado', 'Apresentado']
 df_carteira_total = df_obras[df_obras['Status'].isin(status_venda)]
 valor_vendido_total = df_carteira_total['Vendido'].sum()
