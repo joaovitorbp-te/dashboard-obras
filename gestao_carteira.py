@@ -186,19 +186,16 @@ def format_brl_short(valor):
     else: return f"R$ {valor:,.0f}".replace(",", ".")
 
 # ---------------------------------------------------------
-# 3. LÓGICA DE NEGÓCIO (AJUSTADA)
+# 3. LÓGICA DE NEGÓCIO (AJUSTADA - PREFIXO 4 DÍGITOS)
 # ---------------------------------------------------------
 
-# IDs de Custo Interno (Lista expandida para pegar variações do Excel)
-IDS_ADM = [
-    "5009", "5010", "5011", 
-    "5009.0", "5010.0", "5011.0",
-    "5009.2025", "5010.2025", "5011.2025"
-]
+# IDs de Custo Interno (Busca qualquer coisa que comece com...)
+PREFIXOS_ADM = ("5009", "5010", "5011")
 
-# Separação dos DataFrames
-df_adm = df_raw[df_raw['Projeto'].isin(IDS_ADM)].copy()
-df_obras = df_raw[~df_raw['Projeto'].isin(IDS_ADM)].copy()
+# Separação dos DataFrames usando startswith (tupla)
+mask_adm = df_raw['Projeto'].str.startswith(PREFIXOS_ADM)
+df_adm = df_raw[mask_adm].copy()
+df_obras = df_raw[~mask_adm].copy()
 
 # ========================================================
 # CÁLCULO CUSTOS INTERNOS (Duplicado de Dados & Insights)
