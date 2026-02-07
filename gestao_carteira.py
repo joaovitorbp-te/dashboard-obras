@@ -7,108 +7,12 @@ f
 # 1. CONFIGURAÇÃO VISUAL
 # ---------------------------------------------------------
 st.markdown("""
-<style>
-    /* FORÇAR ALINHAMENTO NO TOPO */
-    .block-container {
-        padding-top: 1rem !important;
-        padding-bottom: 2rem !important;
-    }
-    
-    /* Remove a margem extra do título */
-    h1 {
-        padding-top: 0rem !important;
-        margin-top: -1rem !important;
-    }
-
-    /* --- LAYOUT DOS KPIS (CABEÇALHO) --- */
-    .kpi-card {
-        background-color: #161b22; 
-        border: 1px solid #30363d; 
-        border-radius: 10px; 
-        padding: 20px 15px;
-        height: 100%;
-        display: flex; flex-direction: column; justify-content: space-between; align-items: center;
-        text-align: center;
-        min-height: 130px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    }
-    
-    .kpi-title { 
-        color: #8b949e; font-size: 0.8rem; text-transform: uppercase; 
-        letter-spacing: 1px; font-weight: 600; margin-bottom: 8px;
-    }
-    
-    .kpi-val { 
-        font-size: 1.8rem; font-weight: 800; color: white; 
-        font-family: "Source Sans Pro", sans-serif; margin-bottom: 8px;
-    }
-    
-    .kpi-sub { 
-        font-size: 0.75rem; color: #8b949e; width: 100%;
-        border-top: 1px solid #21262d;
-        padding-top: 8px; margin-top: auto;
-        display: flex; justify-content: space-around;
-    }
-    
-    .txt-green { color: #3fb950; font-weight: bold; }
-    .txt-red { color: #da3633; font-weight: bold; }
-    .txt-blue { color: #58a6ff; font-weight: bold; }
-    .txt-purple { color: #a371f7; font-weight: bold; }
-    .txt-orange { color: #d29922; font-weight: bold; }
-
-    /* --- CSS DOS CARDS DE PROJETO --- */
-    [data-testid="stVerticalBlockBorderWrapper"] {
-        background-color: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 0px !important; transition: transform 0.2s;
-    }
-    [data-testid="stVerticalBlockBorderWrapper"]:hover {
-        border-color: #58a6ff; transform: translateY(-2px);
-    }
-    .tile-header { padding: 15px 15px 10px 15px; }
-    .tile-title { color: white; font-weight: 700; font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px; }
-    .tile-sub { color: #8b949e; font-size: 0.75rem; }
-    .data-strip { background-color: #0d1117; border-top: 1px solid #21262d; border-bottom: 1px solid #21262d; padding: 10px 15px; display: flex; justify-content: space-between; align-items: center; }
-    .data-col { display: flex; flex-direction: column; align-items: center; width: 25%; }
-    .data-col:not(:last-child) { border-right: 1px solid #30363d; }
-    .data-lbl { font-size: 0.6rem; color: #8b949e; text-transform: uppercase; margin-bottom: 2px; }
-    .data-val { font-size: 0.85rem; font-weight: 700; color: #e6edf3; }
-    
-    .tile-footer { padding: 10px 15px; }
-    
-    /* Alinhamento da linha de rodapé (Status --- %) */
-    .footer-row { display: flex; justify-content: space-between; align-items: center; }
-    
-    .progress-track { background-color: #21262d; height: 4px; border-radius: 2px; width: 100%; margin-bottom: 10px; overflow: hidden; }
-    .badge-status { font-size: 0.65rem; font-weight: 700; text-transform: uppercase; padding: 2px 8px; border-radius: 4px; }
-    .footer-pct { font-size: 0.8rem; font-weight: 700; }
-    
-    div[data-testid="stVerticalBlockBorderWrapper"] button {
-        background-color: transparent; color: #58a6ff; border: 1px solid #30363d; border-radius: 4px;
-        font-size: 0.65rem !important; padding: 0px 0px !important; height: 24px !important; min-height: 24px !important; line-height: 1 !important; margin: 0; width: 100%;
-    }
-</style>
-""", unsafe_allow_html=True)
-
-# ---------------------------------------------------------
+<styl
 # 2. DADOS E TRATAMENTO (GOOGLE DRIVE .XLSX)
 # ---------------------------------------------------------
 @st.cache_data(ttl=60)
 def load_data():
     try:
-        # Autenticação via Secrets
-        creds_dict = dict(st.secrets["gcp_service_account"])
-        creds = service_account.Credentials.from_service_account_info(
-            creds_dict,
-            scopes=['https://www.googleapis.com/auth/drive.readonly']
-        )
-        
-        service = build('drive', 'v3', credentials=creds)
-        
-        # Procura o arquivo pelo nome
-        results = service.files().list(
-            q="name='dados_dashboard_obras.xlsx' and trashed=false",
-            fields="files(id, name)"
-        ).execute()
-        files = results.get('files', [])
         
         if not files:
             st.error("Arquivo 'dados_dashboard_obras.xlsx' não encontrado no Google Drive.")
