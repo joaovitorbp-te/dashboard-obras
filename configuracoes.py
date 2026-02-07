@@ -145,13 +145,13 @@ with st.container(border=True):
     """)
     
     st.write("")
-
-    # --- BOTÃO DE ATUALIZAÇÃO MANUAL ---
-    if st.button("Atualizar Dados Agora", use_container_width=True):
+    
+    # --- BOTÃO DE ATUALIZAÇÃO MANUAL (Configuração Padrão) ---
+    if st.button("🔄 Atualizar Dados Agora"):
         st.cache_data.clear()
         st.success("✅ Cache limpo! Os dados estão sendo recarregados...")
         st.rerun()
-    # -----------------------------------
+    # ---------------------------------------------------------
     
     st.write("")
     
