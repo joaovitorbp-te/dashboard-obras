@@ -123,6 +123,9 @@ if df_raw is None:
     st.error("⚠️ Erro ao conectar com o Google Sheets.")
     st.stop()
 
+# --- BLINDAGEM DE DADOS (Igual ao Gestão Carteira) ---
+df_raw['Projeto'] = df_raw['Projeto'].astype(str) # Força tudo para texto
+
 def clean_google_number(x):
     if isinstance(x, (int, float)): return float(x)
     if x is None: return 0.0
@@ -148,7 +151,13 @@ if 'Tipo' not in df_raw.columns:
 else:
     df_raw['Tipo'] = df_raw['Tipo'].replace("", "Não Classificado")
 
-IDS_ADM = [5009.2025, 5010.2025, 5011.2025]
+# --- LISTA EXPANDIDA DE IDs ---
+IDS_ADM = [
+    "5009", "5010", "5011", 
+    "5009.0", "5010.0", "5011.0",
+    "5009.2025", "5010.2025", "5011.2025"
+]
+
 df_adm = df_raw[df_raw['Projeto'].isin(IDS_ADM)].copy()
 df_obras = df_raw[~df_raw['Projeto'].isin(IDS_ADM)].copy()
 df_finalizadas = df_obras[df_obras['Status'].isin(['Finalizado', 'Apresentado'])].copy()
@@ -182,7 +191,7 @@ with tab1:
 
         st.divider()
         st.subheader("Ranking por Planta") 
-        # --- RESTAURADO: GRÁFICO DE BARRAS HORIZONTAL ---
+        
         df_agrupado = df_finalizadas.groupby('Cliente_Local').agg({'Vendido': 'sum', 'Lucro': 'sum'}).reset_index()
         df_agrupado['Margem_%'] = (df_agrupado['Lucro'] / df_agrupado['Vendido'] * 100).fillna(0)
         df_agrupado = df_agrupado.sort_values(by='Vendido', ascending=True)
@@ -260,6 +269,12 @@ with tab3:
     if df_adm.empty:
         st.warning("⚠️ Nenhum projeto 5009, 5010 ou 5011 encontrado.")
     else:
+        # Garantir numéricos antes da soma
+        cols_soma = ['Mat_Real', 'Desp_Real', 'HH_Real_Vlr']
+        for col in cols_soma:
+            if col in df_adm.columns:
+                df_adm[col] = pd.to_numeric(df_adm[col], errors='coerce').fillna(0)
+
         df_adm['Total_Sem_Imp'] = df_adm['Mat_Real'] + df_adm['Desp_Real'] + df_adm['HH_Real_Vlr']
         custo_adm_total = df_adm['Total_Sem_Imp'].sum()
         
