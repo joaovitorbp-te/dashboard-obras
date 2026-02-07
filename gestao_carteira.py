@@ -186,11 +186,10 @@ def format_brl_short(valor):
     else: return f"R$ {valor:,.0f}".replace(",", ".")
 
 # ---------------------------------------------------------
-# 3. LÓGICA DE NEGÓCIO (CORRIGIDA E ROBUSTA)
+# 3. LÓGICA DE NEGÓCIO (AJUSTADA)
 # ---------------------------------------------------------
 
-# IDs de Custo Interno (Todas as variações possíveis para garantir que pegue do Excel)
-# Isso resolve se o Excel estiver enviando "5009" ou "5009.0" ou "5009.2025"
+# IDs de Custo Interno (Lista expandida para pegar variações do Excel)
 IDS_ADM = [
     "5009", "5010", "5011", 
     "5009.0", "5010.0", "5011.0",
@@ -201,20 +200,24 @@ IDS_ADM = [
 df_adm = df_raw[df_raw['Projeto'].isin(IDS_ADM)].copy()
 df_obras = df_raw[~df_raw['Projeto'].isin(IDS_ADM)].copy()
 
-# APLICANDO A MESMA FÓRMULA DE "DADOS & INSIGHTS"
-# 1. Garantir que as colunas são números e zerar os vazios
+# ========================================================
+# CÁLCULO CUSTOS INTERNOS (Duplicado de Dados & Insights)
+# ========================================================
+# 1. Garantir que as colunas são numéricas e sem vazios
 cols_soma = ['Mat_Real', 'Desp_Real', 'HH_Real_Vlr']
 for col in cols_soma:
     if col in df_adm.columns:
         df_adm[col] = pd.to_numeric(df_adm[col], errors='coerce').fillna(0)
 
-# 2. Soma Exata dos custos administrativos (Mat + Desp + HH)
+# 2. Fórmula exata: Mat + Desp + HH (Sem Impostos)
 custo_adm_total = (df_adm['Mat_Real'] + df_adm['Desp_Real'] + df_adm['HH_Real_Vlr']).sum()
+# ========================================================
 
-# Cálculos Macro (Restante igual)
-def get_custo_total_row(row):
+# Função auxiliar para o resto das obras (mantida com impostos para obras de venda)
+def get_custo_total_row_obras(row):
     return row['Mat_Real'] + row['Desp_Real'] + row['HH_Real_Vlr'] + row['Impostos']
 
+# Cálculos Macro
 status_venda = ['Não iniciado', 'Em andamento', 'Finalizado', 'Apresentado']
 df_carteira_total = df_obras[df_obras['Status'].isin(status_venda)]
 valor_vendido_total = df_carteira_total['Vendido'].sum()
@@ -229,13 +232,13 @@ overhead_pct = (custo_adm_total / valor_vendido_total * 100) if valor_vendido_to
 def get_margem_ponderada(df_in):
     if df_in.empty: return 0.0
     venda = df_in['Vendido'].sum()
-    custo = df_in.apply(get_custo_total_row, axis=1).sum()
+    custo = df_in.apply(get_custo_total_row_obras, axis=1).sum()
     return ((venda - custo) / venda * 100) if venda > 0 else 0
 
 mg_geral = get_margem_ponderada(df_obras)
 mg_concluida = get_margem_ponderada(df_concluido)
 
-custo_obras_total = df_obras.apply(get_custo_total_row, axis=1).sum()
+custo_obras_total = df_obras.apply(get_custo_total_row_obras, axis=1).sum()
 lucro_bruto_total = valor_vendido_total - custo_obras_total
 lucro_liquido_final = lucro_bruto_total - custo_adm_total
 mg_liquida_pos_adm = (lucro_liquido_final / valor_vendido_total * 100) if valor_vendido_total > 0 else 0
