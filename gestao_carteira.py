@@ -95,7 +95,7 @@ st.markdown("""
 # ---------------------------------------------------------
 # 2. DADOS E TRATAMENTO (GOOGLE DRIVE .XLSX)
 # ---------------------------------------------------------
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=30)
 def load_data():
     try:
         # Autenticação via Secrets
