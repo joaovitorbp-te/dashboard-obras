@@ -6,7 +6,7 @@ from googleapiclient.http import MediaIoBaseDownload
 import io
 import json
 import os
-import datetime # Adicionado para tratar objetos de tempo
+import datetime
 
 # ---------------------------------------------------------
 # 1. CONFIGURAÇÃO VISUAL
@@ -82,6 +82,7 @@ st.markdown("""
     /* Alinhamento da linha de rodapé (Status --- %) */
     .footer-row { display: flex; justify-content: space-between; align-items: center; }
     
+    /* Barra de Progresso */
     .progress-track { background-color: #21262d; height: 6px; border-radius: 3px; width: 100%; margin-bottom: 10px; overflow: hidden; }
     .progress-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease-in-out; } 
 
@@ -101,7 +102,6 @@ st.markdown("""
 @st.cache_data(ttl=30)
 def load_data():
     try:
-        # Autenticação via Secrets
         creds_dict = dict(st.secrets["gcp_service_account"])
         creds = service_account.Credentials.from_service_account_info(
             creds_dict,
@@ -110,7 +110,6 @@ def load_data():
         
         service = build('drive', 'v3', credentials=creds)
         
-        # Procura o arquivo pelo nome
         results = service.files().list(
             q="name='dados_dashboard_obras.xlsx' and trashed=false",
             fields="files(id, name)"
@@ -122,8 +121,6 @@ def load_data():
             return None
             
         file_id = files[0]['id']
-        
-        # Baixa o arquivo para a memória
         request = service.files().get_media(fileId=file_id)
         file_io = io.BytesIO()
         downloader = MediaIoBaseDownload(file_io, request)
@@ -133,8 +130,6 @@ def load_data():
             status, done = downloader.next_chunk()
             
         file_io.seek(0)
-        
-        # Lê como Excel
         df = pd.read_excel(file_io)
         return df
 
@@ -147,7 +142,7 @@ df_raw = load_data()
 if df_raw is None:
     st.stop()
 
-# --- LIMPEZA DE CABEÇALHOS (EVITA ERRO DE COLUNA NÃO ENCONTRADA) ---
+# --- LIMPEZA DE CABEÇALHOS ---
 df_raw.columns = df_raw.columns.str.strip() 
 
 # --- LIMPEZA DE DADOS FINANCEIROS ---
@@ -168,39 +163,41 @@ def clean_google_number(x):
     except:
         return 0.0
 
-# --- NOVO: LIMPEZA BLINDADA PARA HORAS (Trata datetime.time, texto e frações) ---
+# --- NOVO: LIMPEZA ULTRA ROBUSTA PARA HORAS ---
 def clean_excel_time(x):
     try:
-        # Se for objeto datetime.time (comum em leitura de Excel)
-        if isinstance(x, datetime.time):
-            return x.hour + (x.minute / 60.0) + (x.second / 3600.0)
-        
-        # Se for objeto datetime.datetime
-        if isinstance(x, datetime.datetime):
-            return x.hour + (x.minute / 60.0) + (x.second / 3600.0)
-
-        # Se for numérico direto (Excel armazena horas como fração de dia, ex: 1.0 = 24h)
+        # Se for numérico float (ex: 1.5 = 36h no Excel)
         if isinstance(x, (int, float)):
             return float(x) * 24.0
         
+        # Converte para string para analisar o conteúdo
         s = str(x).strip()
-        if s == "": return 0.0
+        if s == "" or s.lower() == "nan" or s.lower() == "nat": 
+            return 0.0
         
-        # Se for string com ":" (ex: "25:30:00")
+        # Caso 1: String com ":" (Ex: "25:30:00" ou "01:30")
         if ":" in s:
+            # Se tiver "days", o pandas converteu para Timedelta string
+            if "day" in s:
+                return pd.to_timedelta(s).total_seconds() / 3600.0
+                
             parts = s.split(":")
-            h = float(parts[0]) if len(parts) > 0 else 0
+            h = float(parts[0])
             m = float(parts[1]) if len(parts) > 1 else 0
             s_sec = float(parts[2]) if len(parts) > 2 else 0
-            return h + (m/60) + (s_sec/3600)
+            return h + (m/60.0) + (s_sec/3600.0)
+            
+        # Caso 2: Objeto Datetime/Timestamp (Excel lido como data)
+        # Se veio como data, precisamos extrair dias e horas.
+        # Infelizmente pd.read_excel as vezes joga datas aleatórias (1899, 1900).
+        # A melhor aposta aqui se não for numérico é tentar parsear float da string.
         
-        # Se for string numérica (ex: "0.5" ou "1,5") -> Tratamos como fração de dia
         val_clean = s.replace(',', '.')
         return float(val_clean) * 24.0
     except:
         return 0.0
 
-# 1. Aplica limpeza padrão
+# 1. Limpeza Padrão
 cols_numericas_padrao = [
     'Vendido', 'Faturado', 'Mat_Real', 'Desp_Real', 'HH_Real_Vlr', 'Impostos', 'Mat_Orc', 'Conclusao_%'
 ]
@@ -210,15 +207,16 @@ for col in cols_numericas_padrao:
     else:
         df_raw[col] = 0.0
 
-# 2. Aplica limpeza de horas
+# 2. Limpeza de Horas (Forçando String antes para garantir o parse do clean_excel_time)
 cols_horas = ['HH_Orc_Qtd', 'HH_Real_Qtd']
 for col in cols_horas:
     if col in df_raw.columns:
-        df_raw[col] = df_raw[col].apply(clean_excel_time)
+        # Converter para string primeiro ajuda a padronizar o input para a função
+        df_raw[col] = df_raw[col].astype(str).apply(clean_excel_time)
     else:
         df_raw[col] = 0.0
 
-# --- CORREÇÃO DE ESCALA DE PORCENTAGEM (Mantida) ---
+# --- CORREÇÃO DE ESCALA DE PORCENTAGEM ---
 def fix_percentage_scale(x):
     if 0 < x <= 1.5:
         return x * 100
@@ -239,7 +237,7 @@ def format_brl_short(valor):
     else: return f"R$ {valor:,.0f}".replace(",", ".")
 
 # ---------------------------------------------------------
-# 3. LÓGICA DE NEGÓCIO (PREFIXO 4 DÍGITOS)
+# 3. LÓGICA DE NEGÓCIO
 # ---------------------------------------------------------
 
 PREFIXOS_ADM = ("5009", "5010", "5011")
@@ -248,21 +246,17 @@ mask_adm = df_raw['Projeto'].str.startswith(PREFIXOS_ADM)
 df_adm = df_raw[mask_adm].copy()
 df_obras = df_raw[~mask_adm].copy()
 
-# ========================================================
-# CÁLCULO CUSTOS INTERNOS
-# ========================================================
+# Custo Interno
 cols_soma = ['Mat_Real', 'Desp_Real', 'HH_Real_Vlr']
 for col in cols_soma:
     if col in df_adm.columns:
         df_adm[col] = pd.to_numeric(df_adm[col], errors='coerce').fillna(0)
 
 custo_adm_total = (df_adm['Mat_Real'] + df_adm['Desp_Real'] + df_adm['HH_Real_Vlr']).sum()
-# ========================================================
 
 def get_custo_total_row_obras(row):
     return row['Mat_Real'] + row['Desp_Real'] + row['HH_Real_Vlr'] + row['Impostos']
 
-# Cálculos Macro
 status_venda = ['Não iniciado', 'Em andamento', 'Finalizado', 'Apresentado']
 df_carteira_total = df_obras[df_obras['Status'].isin(status_venda)]
 valor_vendido_total = df_carteira_total['Vendido'].sum()
@@ -273,7 +267,6 @@ valor_faturado_total = df_obras['Faturado'].sum()
 
 overhead_pct = (custo_adm_total / valor_vendido_total * 100) if valor_vendido_total > 0 else 0
 
-# Cálculos de Margem
 def get_margem_ponderada(df_in):
     if df_in.empty: return 0.0
     venda = df_in['Vendido'].sum()
@@ -299,7 +292,6 @@ def load_config():
         with open("config.json", "w") as f:
             json.dump(default_data, f)
         return default_data
-    
     with open("config.json", "r") as f:
         data = json.load(f)
         if "meta_custo_adm" not in data: data["meta_custo_adm"] = 5.0
@@ -316,7 +308,6 @@ META_MARGEM_LIQUIDA = META_MARGEM_BRUTA - META_CUSTO_ADM
 # ---------------------------------------------------------
 st.title("Gestão da Carteira")
 
-# LINHA 1 (3 Colunas) - KPIS GRANDES
 row1_c1, row1_c2, row1_c3 = st.columns(3)
 
 pct_meta_venda = (valor_vendido_total / META_VENDAS * 100)
@@ -360,7 +351,6 @@ with row1_c3:
 
 st.write("")
 
-# LINHA 2 (4 Colunas) - MARGENS
 row2_c1, row2_c2, row2_c3, row2_c4 = st.columns(4)
 
 cor_m_geral = "txt-green" if mg_geral >= META_MARGEM_BRUTA else "txt-red"
@@ -422,8 +412,8 @@ def calcular_dados_extras(row):
     lucro = vendido - custo
     margem = (lucro / vendido * 100) if vendido > 0 else 0
     
-    # ATUALIZADO: Usando nomes de colunas ORIGINAIS (Real = Real, Orc = Orc)
-    hh_orc, hh_real = row['HH_Orc_Qtd'], row['HH_Real_Qtd']
+    hh_real = row['HH_Real_Qtd']
+    hh_orc = row['HH_Orc_Qtd']
     
     hh_perc = (hh_real / hh_orc * 100) if hh_orc > 0 else 0
     fisico = row['Conclusao_%']
@@ -477,7 +467,7 @@ for i, (index, row) in enumerate(df_show.iterrows()):
 
         cor_margem = "#da3633" if row['Margem_%'] < META_MARGEM_BRUTA else "#3fb950"
         
-        # Variáveis padrão (sem inversão)
+        # Variáveis padrão
         hh_real = row['HH_Real_Qtd']
         hh_orc = row['HH_Orc_Qtd']
         
