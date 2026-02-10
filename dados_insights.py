@@ -34,7 +34,6 @@ st.markdown("""
 def load_config():
     zeros = {"meta_vendas": 0.0, "meta_margem": 0.0, "meta_custo_adm": 0.0}
     try:
-        # Mesma lógica do painel de obras
         creds_dict = dict(st.secrets["gcp_service_account"])
         creds = service_account.Credentials.from_service_account_info(
             creds_dict, scopes=['https://www.googleapis.com/auth/drive.readonly']
@@ -131,6 +130,7 @@ def format_brl(valor): return f"R$ {valor:,.2f}".replace(",", "X").replace(".", 
 st.title("Dados & Insights")
 tab1, tab2, tab3 = st.tabs(["Cliente", "Segmentos", "Custos Internos"])
 
+# --- TAB 1: CLIENTES ---
 with tab1:
     if df_finalizadas.empty: st.warning("⚠️ Nenhuma obra finalizada encontrada.")
     else:
@@ -151,9 +151,17 @@ with tab1:
         with col_geo: st.subheader("Ranking por Cidade"); df_geo = df_finalizadas.groupby('Cidade').agg({'Vendido': 'sum', 'Lucro': 'sum'}).reset_index(); df_geo['Margem_%'] = (df_geo['Lucro'] / df_geo['Vendido'] * 100).fillna(0); df_geo = df_geo.sort_values(by='Vendido', ascending=True); fig_geo = px.bar(df_geo, y='Cidade', x='Vendido', text_auto='.2s', orientation='h', color='Margem_%', color_continuous_scale=['#da3633', '#e3b341', '#3fb950'], labels={'Vendido': 'R$', 'Cidade': ''}); fig_geo.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font=dict(color='white'), xaxis=dict(showgrid=True, gridcolor='#30363d'), height=350, margin=dict(l=10, r=10, t=10, b=0)); st.plotly_chart(fig_geo, use_container_width=True, config={'displayModeBar': False})
         st.caption("ℹ️ **Nota:** Estas análises consideram apenas obras com status 'Finalizado' ou 'Apresentado'.")
 
+# --- TAB 2: SEGMENTOS (COM CORREÇÃO DE ERRO) ---
 with tab2:
     st.write("")
-    if df_finalizadas['Tipo'].iloc[0] == "Não Classificado" and len(df_finalizadas['Tipo'].unique()) == 1: st.info("💡 Preencha a coluna 'Tipo' na planilha para ativar esta análise.")
+    
+    # [CORREÇÃO] Verifica se o DataFrame está vazio ANTES de acessar .iloc[0]
+    if df_finalizadas.empty:
+        st.info("ℹ️ Nenhuma obra finalizada encontrada para analisar por segmento.")
+    
+    # Se não está vazio, segue a lógica normal
+    elif df_finalizadas['Tipo'].iloc[0] == "Não Classificado" and len(df_finalizadas['Tipo'].unique()) == 1: 
+        st.info("💡 Preencha a coluna 'Tipo' na planilha para ativar esta análise.")
     else:
         df_tipo = df_finalizadas.groupby('Tipo').agg({'Vendido': 'sum', 'Lucro': 'sum', 'Projeto': 'count'}).reset_index()
         df_tipo['Margem_Media'] = (df_tipo['Lucro'] / df_tipo['Vendido'] * 100).fillna(0)
@@ -162,6 +170,7 @@ with tab2:
         with c2: st.subheader("Matriz Rentabilidade x Receita"); fig_scat = px.scatter(df_tipo, x='Vendido', y='Margem_Media', size='Vendido', color='Tipo', text='Tipo', hover_name='Tipo', labels={'Vendido': 'Volume Vendido (R$)', 'Margem_Media': 'Rentabilidade (%)'}); fig_scat.add_hline(y=META_MARGEM, line_dash="dash", line_color="#8b949e", annotation_text=f"Meta"); fig_scat.update_traces(textposition='top center', marker=dict(line=dict(width=1, color='White'))); fig_scat.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font=dict(color='white'), xaxis=dict(showgrid=True, gridcolor='#30363d'), yaxis=dict(showgrid=True, gridcolor='#30363d'), showlegend=False); st.plotly_chart(fig_scat, use_container_width=True, config={'displayModeBar': False})
         st.caption("ℹ️ **Nota:** Estas análises consideram apenas obras com status 'Finalizado' ou 'Apresentado'.")
 
+# --- TAB 3: CUSTOS INTERNOS ---
 with tab3:
     st.write("")
     if df_adm.empty: st.warning("⚠️ Nenhum projeto 5009, 5010 ou 5011 encontrado.")
