@@ -81,7 +81,11 @@ st.markdown("""
     /* Alinhamento da linha de rodapé (Status --- %) */
     .footer-row { display: flex; justify-content: space-between; align-items: center; }
     
-    .progress-track { background-color: #21262d; height: 4px; border-radius: 2px; width: 100%; margin-bottom: 10px; overflow: hidden; }
+    /* --- BARRA DE PROGRESSO (CORREÇÃO AQUI) --- */
+    .progress-track { background-color: #21262d; height: 6px; border-radius: 3px; width: 100%; margin-bottom: 10px; overflow: hidden; }
+    .progress-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease-in-out; } 
+    /* ------------------------------------------ */
+
     .badge-status { font-size: 0.65rem; font-weight: 700; text-transform: uppercase; padding: 2px 8px; border-radius: 4px; }
     .footer-pct { font-size: 0.8rem; font-weight: 700; }
     
@@ -205,9 +209,11 @@ for col in cols_horas:
     else:
         df_raw[col] = 0.0
 
-# --- CORREÇÃO DE ESCALA DE PORCENTAGEM (Mantida) ---
+# --- CORREÇÃO DE ESCALA DE PORCENTAGEM ---
+# Se o valor vier como decimal (ex: 0.1 para 10%), multiplica por 100
+# Se o valor vier como inteiro (ex: 10 para 10%), mantém
 def fix_percentage_scale(x):
-    if 0 < x <= 1.5:
+    if 0 < x <= 1.5: # Consideramos que qualquer coisa <= 1.5 é fração decimal (150%)
         return x * 100
     return x
 
@@ -409,7 +415,6 @@ def calcular_dados_extras(row):
     lucro = vendido - custo
     margem = (lucro / vendido * 100) if vendido > 0 else 0
     
-    # ATUALIZADO: Usando nomes de colunas ORIGINAIS (Real = Real, Orc = Orc)
     hh_orc, hh_real = row['HH_Orc_Qtd'], row['HH_Real_Qtd']
     
     hh_perc = (hh_real / hh_orc * 100) if hh_orc > 0 else 0
@@ -464,7 +469,6 @@ for i, (index, row) in enumerate(df_show.iterrows()):
 
         cor_margem = "#da3633" if row['Margem_%'] < META_MARGEM_BRUTA else "#3fb950"
         
-        # ATUALIZADO: Usando nomes de colunas ORIGINAIS (Real = Real, Orc = Orc)
         hh_real = row['HH_Real_Qtd']
         hh_orc = row['HH_Orc_Qtd']
         
