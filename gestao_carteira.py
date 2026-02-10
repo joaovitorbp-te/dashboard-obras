@@ -7,7 +7,6 @@ import io
 import json
 import os
 import datetime
-import gspread 
 
 # ---------------------------------------------------------
 # 1. CONFIGURAÇÃO VISUAL
@@ -163,36 +162,58 @@ df_aberto = df_obras[df_obras['Status'].isin(['Em andamento', 'Não iniciado'])]
 qtd_aberto = len(df_aberto)
 qtd_total = len(df_obras)
 
-# --- CARREGAR METAS (SHEET2) - SEM CACHE NO CÓDIGO ---
+# --- CARREGAR METAS (SHEET2) - VIA PANDAS ---
 @st.cache_data(ttl=30)
 def load_config():
-    # Zeros por padrão para evidenciar erro se falhar
     zeros = {"meta_vendas": 0.0, "meta_margem": 0.0, "meta_custo_adm": 0.0}
     try:
-        scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-        gc = gspread.service_account_from_dict(st.secrets["gcp_service_account"], scopes=scopes)
-        sh = gc.open("dados_dashboard_obras")
-        ws = sh.worksheet("Sheet2")
-        vals = ws.row_values(2)
-        if len(vals) >= 3:
-            def parse_pt_br(x):
-                if isinstance(x, (int, float)): return float(x)
-                clean = str(x).replace("R$", "").replace("%", "").strip()
-                clean = clean.replace(".", "").replace(",", ".")
-                try: return float(clean)
-                except: return 0.0
-            return {
-                "meta_vendas": parse_pt_br(vals[0]),
-                "meta_margem": parse_pt_br(vals[1]),
-                "meta_custo_adm": parse_pt_br(vals[2])
-            }
-        return zeros
+        # Autentica e baixa o arquivo Excel novamente (ou usa cache se separar a função de download)
+        # Para simplificar, fazemos o download direto aqui também.
+        creds_dict = dict(st.secrets["gcp_service_account"])
+        creds = service_account.Credentials.from_service_account_info(
+            creds_dict, scopes=['https://www.googleapis.com/auth/drive.readonly']
+        )
+        service = build('drive', 'v3', credentials=creds)
+        # Busca ID (pode otimizar hardcoding se o nome não muda)
+        results = service.files().list(q="name='dados_dashboard_obras.xlsx' and trashed=false", fields="files(id)").execute()
+        files = results.get('files', [])
+        if not files: return zeros
+        
+        request = service.files().get_media(fileId=files[0]['id'])
+        file_io = io.BytesIO()
+        downloader = MediaIoBaseDownload(file_io, request)
+        done = False
+        while done is False: status, done = downloader.next_chunk()
+        file_io.seek(0)
+        
+        # Lê a Sheet2
+        df_conf = pd.read_excel(file_io, sheet_name='Sheet2')
+        if df_conf.empty: return zeros
+        
+        row = df_conf.iloc[0]
+        def parse_val(val):
+            if isinstance(val, (int, float)): return float(val)
+            s = str(val).replace('R$', '').replace('%', '').strip()
+            s = s.replace('.', '').replace(',', '.')
+            try: return float(s)
+            except: return 0.0
+            
+        return {
+            "meta_vendas": parse_val(row.iloc[0]),
+            "meta_margem": parse_val(row.iloc[1]),
+            "meta_custo_adm": parse_val(row.iloc[2])
+        }
     except: return zeros
 
 config = load_config()
 META_VENDAS = float(config["meta_vendas"])
+# Ajuste percentual se vier 0.25 (Excel) ou 25 (Inteiro)
 META_MARGEM_BRUTA = float(config["meta_margem"])
+if META_MARGEM_BRUTA <= 1.0: META_MARGEM_BRUTA *= 100
+
 META_CUSTO_ADM = float(config["meta_custo_adm"])
+if META_CUSTO_ADM <= 1.0: META_CUSTO_ADM *= 100
+
 META_MARGEM_LIQUIDA = META_MARGEM_BRUTA - META_CUSTO_ADM
 
 # ---------------------------------------------------------
@@ -201,7 +222,6 @@ META_MARGEM_LIQUIDA = META_MARGEM_BRUTA - META_CUSTO_ADM
 st.title("Gestão da Carteira")
 
 row1_c1, row1_c2, row1_c3 = st.columns(3)
-# Proteção contra divisão por zero se meta vier 0
 pct_meta_venda = (valor_vendido_total / META_VENDAS * 100) if META_VENDAS > 0 else 0
 with row1_c1:
     st.markdown(f"""<div class="kpi-card" style="border-top: 4px solid #58a6ff;"><div class="kpi-title">Valor Vendido</div><div class="kpi-val">{format_brl_full(valor_vendido_total)}</div><div class="kpi-sub"><span>Meta: {pct_meta_venda:.0f}%</span><span class="txt-blue">{format_brl_full(valor_faturado_total)} faturados</span></div></div>""", unsafe_allow_html=True)
