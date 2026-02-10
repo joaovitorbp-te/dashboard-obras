@@ -35,7 +35,7 @@ st.title("Configurações")
 def load_config_from_sheet():
     zeros = {"meta_vendas": 0.0, "meta_margem": 0.0, "meta_custo_adm": 0.0}
     try:
-        # 1. Autenticação (Mesma lógica do load_data)
+        # 1. Autenticação
         creds_dict = dict(st.secrets["gcp_service_account"])
         creds = service_account.Credentials.from_service_account_info(
             creds_dict,
@@ -65,14 +65,13 @@ def load_config_from_sheet():
         file_io.seek(0)
         
         # 4. Ler a aba 'Sheet2' com Pandas
-        # O Pandas é inteligente para ler tanto "R$ 1.000,00" (texto) quanto 1000 (número)
         df_config = pd.read_excel(file_io, sheet_name='Sheet2')
         
         if not df_config.empty:
             # Pega a primeira linha de dados (índice 0)
             row = df_config.iloc[0]
             
-            # Função de limpeza para garantir número, venha como texto ou float
+            # Função de limpeza
             def parse_val(val):
                 if isinstance(val, (int, float)): return float(val)
                 s = str(val).replace('R$', '').replace('%', '').strip()
@@ -98,13 +97,11 @@ config_atual = load_config_from_sheet()
 # 1. VISUALIZAÇÃO DAS METAS
 # ---------------------------------------------------------
 with st.container(border=True):
-    st.subheader("Parâmetros de Metas (Lido da Sheet2)")
+    st.subheader("Parâmetros de Metas")
     
     if "error" in config_atual and config_atual["error"]:
         st.error(f"Erro ao ler Sheet2: {config_atual['error']}")
     
-    # [REMOVIDO] O st.info que estava aqui foi retirado.
-
     st.write("") 
     
     col1, col2, col3 = st.columns(3)
@@ -113,7 +110,6 @@ with st.container(border=True):
         st.metric("Meta Anual de Vendas", f"R$ {config_atual['meta_vendas']:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
         
     with col2:
-        # Se for decimal (0.25), multiplica por 100. Se for inteiro (25), mantém.
         val_margem = config_atual['meta_margem']
         if val_margem <= 1.0: val_margem *= 100
         st.metric("Meta Margem Bruta", f"{val_margem:.2f}%".replace(".", ","))
@@ -140,12 +136,8 @@ with st.container(border=True):
     
     **Para atualizar:**
     1. Abra o arquivo **'dados_dashboard_obras.xlsx'** no Drive.
-    2. Edite a aba de dados ou a aba **'Sheet2'**.
+    2. Edite a aba **Sheet1** para orçamentos ou a aba **Sheet2** para metas.
     3. As alterações aparecerão aqui automaticamente.
     """)
     
     st.write("")
-    
-    with st.expander("Verificar dados brutos (Sheet2)"):
-        if "error" not in config_atual:
-            st.json(config_atual)
