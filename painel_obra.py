@@ -156,6 +156,16 @@ for col in cols_numericas:
     else:
         df_raw[col] = 0.0
 
+# --- CORREÇÃO DE ESCALA DE PORCENTAGEM (ITEM 1) ---
+# Se o valor vier como decimal (ex: 0.5 para 50%), multiplica por 100
+def fix_percentage_scale(x):
+    if 0 < x <= 1.5:
+        return x * 100
+    return x
+
+if 'Conclusao_%' in df_raw.columns:
+    df_raw['Conclusao_%'] = df_raw['Conclusao_%'].apply(fix_percentage_scale)
+
 # ---------------------------------------------------------
 # SIDEBAR
 # ---------------------------------------------------------
@@ -303,9 +313,14 @@ with st.container(border=True):
             }
         ))
 
-        # Gauge 2: Horas
-        hh_orc = dados['HH_Orc_Qtd']
-        hh_real = dados['HH_Real_Qtd']
+        # ---------------------------------------------------------------------------------
+        # CORREÇÃO ITEM 2 e 3: INVERSÃO DE VARIÁVEIS CONFORME SOLICITADO
+        # Quantidade Real = coluna HH_Orc_Qtd
+        # Quantidade Orçada = coluna HH_Real_Qtd
+        # ---------------------------------------------------------------------------------
+        hh_real = dados['HH_Orc_Qtd'] # Agora puxa de Orc_Qtd
+        hh_orc = dados['HH_Real_Qtd'] # Agora puxa de Real_Qtd
+
         perc_hh = (hh_real / hh_orc * 100) if hh_orc > 0 else 0
         cor_hh = "#da3633" if perc_hh > (dados['Conclusao_%'] + 10) else "#58a6ff"
 
@@ -330,14 +345,15 @@ with st.container(border=True):
         st.plotly_chart(fig_gauge, use_container_width=True, config={'displayModeBar': False})
 
     with col_diag:
+        # ---------------------------------------------------------------------------------
+        # CORREÇÃO ITEM 3: SALDO = ORÇADO - REAL (com variáveis invertidas)
+        # ---------------------------------------------------------------------------------
         saldo_hh = hh_orc - hh_real
         
-        # --- CORREÇÃO DE ERRO: CONVERSÃO SEGURA PARA INT ---
         try:
             saldo_hh_int = int(saldo_hh)
         except:
             saldo_hh_int = 0
-        # ---------------------------------------------------
         
         if perc_hh > (dados['Conclusao_%'] + 10):
             border_c = "#da3633" 
