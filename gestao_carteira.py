@@ -163,30 +163,31 @@ def clean_google_number(x):
     except:
         return 0.0
 
-# --- NOVO: LIMPEZA ESPECÍFICA PARA HORAS (Formato [h]:mm:ss) ---
+# --- NOVO: LIMPEZA BLINDADA PARA HORAS (Excel [h]:mm:ss) ---
 def clean_excel_time(x):
-    # Se for numérico (Excel armazena horas como fração de dias, ex: 1.5 = 36h)
-    if isinstance(x, (int, float)):
-        return float(x) * 24.0
-    
-    # Se for texto (ex: "25:30:00")
-    s = str(x).strip()
-    if s == "": return 0.0
-    
-    if ":" in s:
-        try:
+    try:
+        # Se for numérico direto (Excel armazena horas como fração de dia, ex: 1.0 = 24h)
+        if isinstance(x, (int, float)):
+            return float(x) * 24.0
+        
+        s = str(x).strip()
+        if s == "": return 0.0
+        
+        # Se for string com ":" (ex: "25:30:00")
+        if ":" in s:
             parts = s.split(":")
-            h = float(parts[0])
+            h = float(parts[0]) if len(parts) > 0 else 0
             m = float(parts[1]) if len(parts) > 1 else 0
             s_sec = float(parts[2]) if len(parts) > 2 else 0
             return h + (m/60) + (s_sec/3600)
-        except:
-            pass
-            
-    # Tenta limpeza padrão se não tiver dois pontos
-    return clean_google_number(x)
+        
+        # Se for string numérica (ex: "0.5" ou "1,5") -> Tratamos como fração de dia
+        val_clean = s.replace(',', '.')
+        return float(val_clean) * 24.0
+    except:
+        return 0.0
 
-# Colunas financeiras e percentuais (padrão)
+# 1. Colunas Padrão (Financeiro e %)
 cols_numericas_padrao = [
     'Vendido', 'Faturado', 'Mat_Real', 'Desp_Real', 'HH_Real_Vlr', 'Impostos', 'Mat_Orc', 'Conclusao_%'
 ]
@@ -196,7 +197,7 @@ for col in cols_numericas_padrao:
     else:
         df_raw[col] = 0.0
 
-# Colunas de Horas (usando a nova função)
+# 2. Colunas de Horas (Tratamento Especial)
 cols_horas = ['HH_Orc_Qtd', 'HH_Real_Qtd']
 for col in cols_horas:
     if col in df_raw.columns:
@@ -225,12 +226,11 @@ def format_brl_short(valor):
     else: return f"R$ {valor:,.0f}".replace(",", ".")
 
 # ---------------------------------------------------------
-# 3. LÓGICA DE NEGÓCIO (AJUSTADA - PREFIXO 4 DÍGITOS)
+# 3. LÓGICA DE NEGÓCIO (PREFIXO 4 DÍGITOS)
 # ---------------------------------------------------------
 
 PREFIXOS_ADM = ("5009", "5010", "5011")
 
-# Separação dos DataFrames usando startswith (tupla)
 mask_adm = df_raw['Projeto'].str.startswith(PREFIXOS_ADM)
 df_adm = df_raw[mask_adm].copy()
 df_obras = df_raw[~mask_adm].copy()
@@ -409,7 +409,7 @@ def calcular_dados_extras(row):
     lucro = vendido - custo
     margem = (lucro / vendido * 100) if vendido > 0 else 0
     
-    # ATUALIZADO: Usando nomes de colunas corretos (sem troca)
+    # ATUALIZADO: Usando nomes de colunas ORIGINAIS (Real = Real, Orc = Orc)
     hh_orc, hh_real = row['HH_Orc_Qtd'], row['HH_Real_Qtd']
     
     hh_perc = (hh_real / hh_orc * 100) if hh_orc > 0 else 0
@@ -464,7 +464,7 @@ for i, (index, row) in enumerate(df_show.iterrows()):
 
         cor_margem = "#da3633" if row['Margem_%'] < META_MARGEM_BRUTA else "#3fb950"
         
-        # ATUALIZADO: Usando nomes de colunas corretos (sem troca)
+        # ATUALIZADO: Usando nomes de colunas ORIGINAIS (Real = Real, Orc = Orc)
         hh_real = row['HH_Real_Qtd']
         hh_orc = row['HH_Orc_Qtd']
         
