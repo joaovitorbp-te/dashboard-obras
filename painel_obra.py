@@ -7,7 +7,7 @@ from googleapiclient.http import MediaIoBaseDownload
 import io
 import json
 import os
-import datetime # Adicionado para tratar objetos de tempo
+import datetime
 
 # ---------------------------------------------------------
 # 1. ESTILO CSS
@@ -130,8 +130,8 @@ if df_raw is None:
     st.error("⚠️ Erro ao conectar com o Google Sheets.")
     st.stop()
 
-# --- LIMPEZA DE CABEÇALHOS (EVITA ERRO DE COLUNA NÃO ENCONTRADA) ---
-df_raw.columns = df_raw.columns.str.strip() 
+# --- LIMPEZA DE CABEÇALHOS ---
+df_raw.columns = df_raw.columns.str.strip()
 
 # --- LIMPEZA DE DADOS (CRÍTICO) ---
 def clean_google_number(x):
@@ -149,39 +149,32 @@ def clean_google_number(x):
     except:
         return 0.0
 
-# --- NOVO: LIMPEZA BLINDADA PARA HORAS (Trata datetime.time, texto e frações) ---
+# --- NOVO: LIMPEZA ULTRA ROBUSTA PARA HORAS ---
 def clean_excel_time(x):
     try:
-        # Se for objeto datetime.time (comum em leitura de Excel)
-        if isinstance(x, datetime.time):
-            return x.hour + (x.minute / 60.0) + (x.second / 3600.0)
-        
-        # Se for objeto datetime.datetime
-        if isinstance(x, datetime.datetime):
-            return x.hour + (x.minute / 60.0) + (x.second / 3600.0)
-
-        # Se for numérico direto (Excel armazena horas como fração de dia, ex: 1.0 = 24h)
         if isinstance(x, (int, float)):
             return float(x) * 24.0
         
         s = str(x).strip()
-        if s == "": return 0.0
+        if s == "" or s.lower() == "nan" or s.lower() == "nat": 
+            return 0.0
         
-        # Se for string com ":" (ex: "25:30:00")
         if ":" in s:
+            if "day" in s:
+                return pd.to_timedelta(s).total_seconds() / 3600.0
+                
             parts = s.split(":")
-            h = float(parts[0]) if len(parts) > 0 else 0
+            h = float(parts[0])
             m = float(parts[1]) if len(parts) > 1 else 0
             s_sec = float(parts[2]) if len(parts) > 2 else 0
-            return h + (m/60) + (s_sec/3600)
-        
-        # Se for string numérica (ex: "0.5" ou "1,5") -> Tratamos como fração de dia
+            return h + (m/60.0) + (s_sec/3600.0)
+            
         val_clean = s.replace(',', '.')
         return float(val_clean) * 24.0
     except:
         return 0.0
 
-# 1. Colunas Padrão (Financeiro e %)
+# 1. Colunas Padrão
 cols_numericas_padrao = [
     'Vendido', 'Faturado', 'Mat_Real', 'Desp_Real', 'HH_Real_Vlr', 'Impostos', 'Mat_Orc', 
     'Desp_Orc', 'HH_Orc_Vlr', 'Conclusao_%'
@@ -192,11 +185,11 @@ for col in cols_numericas_padrao:
     else:
         df_raw[col] = 0.0
 
-# 2. Colunas de Horas (Tratamento Especial)
+# 2. Colunas de Horas (Convertendo para string antes)
 cols_horas = ['HH_Orc_Qtd', 'HH_Real_Qtd']
 for col in cols_horas:
     if col in df_raw.columns:
-        df_raw[col] = df_raw[col].apply(clean_excel_time)
+        df_raw[col] = df_raw[col].astype(str).apply(clean_excel_time)
     else:
         df_raw[col] = 0.0
 
@@ -357,10 +350,10 @@ with st.container(border=True):
         ))
 
         # ---------------------------------------------------------------------------------
-        # ATUALIZADO: LÓGICA PADRÃO (Real = HH_Real_Qtd, Orçado = HH_Orc_Qtd)
+        # ATUALIZADO: Variáveis Padrão (Real = Real, Orc = Orc)
         # ---------------------------------------------------------------------------------
-        hh_real = dados['HH_Real_Qtd'] # REAL = Coluna Real_Qtd
-        hh_orc = dados['HH_Orc_Qtd']   # ORÇADO = Coluna Orc_Qtd
+        hh_real = dados['HH_Real_Qtd']
+        hh_orc = dados['HH_Orc_Qtd']
 
         perc_hh = (hh_real / hh_orc * 100) if hh_orc > 0 else 0
         cor_hh = "#da3633" if perc_hh > (dados['Conclusao_%'] + 10) else "#58a6ff"
@@ -387,7 +380,7 @@ with st.container(border=True):
 
     with col_diag:
         # ---------------------------------------------------------------------------------
-        # ATUALIZADO: SALDO = ORÇADO (HH_Orc_Qtd) - REAL (HH_Real_Qtd)
+        # SALDO = ORÇADO - REAL (Variáveis Padrão)
         # ---------------------------------------------------------------------------------
         saldo_hh = hh_orc - hh_real
         
