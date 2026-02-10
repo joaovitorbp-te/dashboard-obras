@@ -163,20 +163,48 @@ def clean_google_number(x):
     except:
         return 0.0
 
-cols_numericas = [
-    'Vendido', 'Faturado', 'Mat_Real', 'Desp_Real', 'HH_Real_Vlr', 'Impostos', 'Mat_Orc',
-    'HH_Orc_Qtd', 'HH_Real_Qtd', 'Conclusao_%' 
-]
+# --- NOVO: LIMPEZA ESPECÍFICA PARA HORAS (Formato [h]:mm:ss) ---
+def clean_excel_time(x):
+    # Se for numérico (Excel armazena horas como fração de dias, ex: 1.5 = 36h)
+    if isinstance(x, (int, float)):
+        return float(x) * 24.0
+    
+    # Se for texto (ex: "25:30:00")
+    s = str(x).strip()
+    if s == "": return 0.0
+    
+    if ":" in s:
+        try:
+            parts = s.split(":")
+            h = float(parts[0])
+            m = float(parts[1]) if len(parts) > 1 else 0
+            s_sec = float(parts[2]) if len(parts) > 2 else 0
+            return h + (m/60) + (s_sec/3600)
+        except:
+            pass
+            
+    # Tenta limpeza padrão se não tiver dois pontos
+    return clean_google_number(x)
 
-for col in cols_numericas:
+# Colunas financeiras e percentuais (padrão)
+cols_numericas_padrao = [
+    'Vendido', 'Faturado', 'Mat_Real', 'Desp_Real', 'HH_Real_Vlr', 'Impostos', 'Mat_Orc', 'Conclusao_%'
+]
+for col in cols_numericas_padrao:
     if col in df_raw.columns:
         df_raw[col] = df_raw[col].apply(clean_google_number)
     else:
         df_raw[col] = 0.0
 
-# --- CORREÇÃO DE ESCALA DE PORCENTAGEM (ITEM 4) ---
-# Se o valor vier como decimal (ex: 0.5 para 50%), multiplica por 100
-# Assumimos que valores <= 1.5 são decimais e precisam de conversão
+# Colunas de Horas (usando a nova função)
+cols_horas = ['HH_Orc_Qtd', 'HH_Real_Qtd']
+for col in cols_horas:
+    if col in df_raw.columns:
+        df_raw[col] = df_raw[col].apply(clean_excel_time)
+    else:
+        df_raw[col] = 0.0
+
+# --- CORREÇÃO DE ESCALA DE PORCENTAGEM (Mantida) ---
 def fix_percentage_scale(x):
     if 0 < x <= 1.5:
         return x * 100
@@ -200,7 +228,6 @@ def format_brl_short(valor):
 # 3. LÓGICA DE NEGÓCIO (AJUSTADA - PREFIXO 4 DÍGITOS)
 # ---------------------------------------------------------
 
-# IDs de Custo Interno (Busca qualquer coisa que comece com...)
 PREFIXOS_ADM = ("5009", "5010", "5011")
 
 # Separação dos DataFrames usando startswith (tupla)
@@ -209,19 +236,16 @@ df_adm = df_raw[mask_adm].copy()
 df_obras = df_raw[~mask_adm].copy()
 
 # ========================================================
-# CÁLCULO CUSTOS INTERNOS (Duplicado de Dados & Insights)
+# CÁLCULO CUSTOS INTERNOS
 # ========================================================
-# 1. Garantir que as colunas são numéricas e sem vazios
 cols_soma = ['Mat_Real', 'Desp_Real', 'HH_Real_Vlr']
 for col in cols_soma:
     if col in df_adm.columns:
         df_adm[col] = pd.to_numeric(df_adm[col], errors='coerce').fillna(0)
 
-# 2. Fórmula exata: Mat + Desp + HH (Sem Impostos)
 custo_adm_total = (df_adm['Mat_Real'] + df_adm['Desp_Real'] + df_adm['HH_Real_Vlr']).sum()
 # ========================================================
 
-# Função auxiliar para o resto das obras (mantida com impostos para obras de venda)
 def get_custo_total_row_obras(row):
     return row['Mat_Real'] + row['Desp_Real'] + row['HH_Real_Vlr'] + row['Impostos']
 
@@ -279,7 +303,7 @@ META_MARGEM_LIQUIDA = META_MARGEM_BRUTA - META_CUSTO_ADM
 # ---------------------------------------------------------
 st.title("Gestão da Carteira")
 
-# LINHA 1 (3 Colunas) - KPIS GRANDES (Formatação COMPLETA)
+# LINHA 1 (3 Colunas) - KPIS GRANDES
 row1_c1, row1_c2, row1_c3 = st.columns(3)
 
 pct_meta_venda = (valor_vendido_total / META_VENDAS * 100)
@@ -385,9 +409,7 @@ def calcular_dados_extras(row):
     lucro = vendido - custo
     margem = (lucro / vendido * 100) if vendido > 0 else 0
     
-    # AJUSTE ITEM 2: Inversão aqui também se necessário? 
-    # Não, aqui é genérico. Mas no gráfico detalhado foi pedido troca.
-    # Mantendo original aqui pois o pedido foi específico para o "gráfico de consumo"
+    # ATUALIZADO: Usando nomes de colunas corretos (sem troca)
     hh_orc, hh_real = row['HH_Orc_Qtd'], row['HH_Real_Qtd']
     
     hh_perc = (hh_real / hh_orc * 100) if hh_orc > 0 else 0
@@ -442,11 +464,9 @@ for i, (index, row) in enumerate(df_show.iterrows()):
 
         cor_margem = "#da3633" if row['Margem_%'] < META_MARGEM_BRUTA else "#3fb950"
         
-        # --- TROCA DE COLUNAS SOLICITADA (ITEM 2) ---
-        # No card principal, vamos manter a lógica padrão a menos que queira trocar aqui também.
-        # Mas para garantir consistência com o detalhe, vou inverter aqui também.
-        hh_real = row['HH_Orc_Qtd']   # REAL = Coluna Orc_Qtd
-        hh_orc = row['HH_Real_Qtd']   # ORÇADO = Coluna Real_Qtd
+        # ATUALIZADO: Usando nomes de colunas corretos (sem troca)
+        hh_real = row['HH_Real_Qtd']
+        hh_orc = row['HH_Orc_Qtd']
         
         pct_horas = (hh_real / hh_orc * 100) if hh_orc > 0 else 0
         cor_horas = "#da3633" if pct_horas > 100 else "#e6edf3"
@@ -455,7 +475,6 @@ for i, (index, row) in enumerate(df_show.iterrows()):
         pct_mat = (mat_real / mat_orc * 100) if mat_orc > 0 else 0
         cor_mat = "#da3633" if pct_mat > 100 else "#e6edf3"
         
-        # Formatação Abreviada (Short)
         valor_formatado = format_brl_short(row['Vendido'])
         
         with st.container(border=True):
