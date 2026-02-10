@@ -7,6 +7,7 @@ from googleapiclient.http import MediaIoBaseDownload
 import io
 import json
 import os
+import datetime # Adicionado para tratar objetos de tempo
 
 # ---------------------------------------------------------
 # 1. ESTILO CSS
@@ -129,6 +130,9 @@ if df_raw is None:
     st.error("⚠️ Erro ao conectar com o Google Sheets.")
     st.stop()
 
+# --- LIMPEZA DE CABEÇALHOS (EVITA ERRO DE COLUNA NÃO ENCONTRADA) ---
+df_raw.columns = df_raw.columns.str.strip() 
+
 # --- LIMPEZA DE DADOS (CRÍTICO) ---
 def clean_google_number(x):
     if isinstance(x, (int, float)):
@@ -145,9 +149,17 @@ def clean_google_number(x):
     except:
         return 0.0
 
-# --- NOVO: LIMPEZA BLINDADA PARA HORAS (Excel [h]:mm:ss) ---
+# --- NOVO: LIMPEZA BLINDADA PARA HORAS (Trata datetime.time, texto e frações) ---
 def clean_excel_time(x):
     try:
+        # Se for objeto datetime.time (comum em leitura de Excel)
+        if isinstance(x, datetime.time):
+            return x.hour + (x.minute / 60.0) + (x.second / 3600.0)
+        
+        # Se for objeto datetime.datetime
+        if isinstance(x, datetime.datetime):
+            return x.hour + (x.minute / 60.0) + (x.second / 3600.0)
+
         # Se for numérico direto (Excel armazena horas como fração de dia, ex: 1.0 = 24h)
         if isinstance(x, (int, float)):
             return float(x) * 24.0
