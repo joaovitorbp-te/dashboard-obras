@@ -81,7 +81,6 @@ def load_config_from_sheet():
                 except: return 0.0
 
             # Assume ordem das colunas: Vendas | Margem | Adm
-            # Ou acessa pelo nome da coluna se soubermos exatamente, mas por índice é mais seguro se o nome mudar pouco
             return {
                 "meta_vendas": parse_val(row.iloc[0]),
                 "meta_margem": parse_val(row.iloc[1]),
@@ -103,8 +102,8 @@ with st.container(border=True):
     
     if "error" in config_atual and config_atual["error"]:
         st.error(f"Erro ao ler Sheet2: {config_atual['error']}")
-    else:
-        st.info("ℹ️ Dados puxados da aba **'Sheet2'** do arquivo **dados_dashboard_obras.xlsx**.")
+    
+    # [REMOVIDO] O st.info que estava aqui foi retirado.
 
     st.write("") 
     
