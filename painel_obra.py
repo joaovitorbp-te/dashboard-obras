@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import plotly.graph_objects as go
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
@@ -9,88 +8,97 @@ import json
 import os
 
 # ---------------------------------------------------------
-# 1. ESTILO CSS
+# 1. CONFIGURAÇÃO VISUAL
 # ---------------------------------------------------------
 st.markdown("""
 <style>
-    .stApp {background-color: #0e1117;}
-    
-    /* --- ALINHAMENTO NO TOPO --- */
+    /* FORÇAR ALINHAMENTO NO TOPO */
     .block-container {
         padding-top: 1rem !important;
         padding-bottom: 2rem !important;
     }
+    
+    /* Remove a margem extra do título */
     h1 {
         padding-top: 0rem !important;
         margin-top: -1rem !important;
     }
 
-    .js-plotly-plot .plotly .modebar {display: none !important;}
-
-    /* --- LAYOUT DOS CARDS (KPIs) --- */
+    /* --- LAYOUT DOS KPIS (CABEÇALHO) --- */
     .kpi-card {
         background-color: #161b22; 
         border: 1px solid #30363d; 
         border-radius: 10px; 
         padding: 20px 15px;
         height: 100%;
-        display: flex; flex-direction: column; justify-content: center; align-items: center;
+        display: flex; flex-direction: column; justify-content: space-between; align-items: center;
         text-align: center;
-        min-height: 120px;
+        min-height: 130px;
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     }
     
     .kpi-title { 
         color: #8b949e; font-size: 0.8rem; text-transform: uppercase; 
-        letter-spacing: 1px; font-weight: 600; margin-bottom: 10px;
+        letter-spacing: 1px; font-weight: 600; margin-bottom: 8px;
     }
     
     .kpi-val { 
         font-size: 1.8rem; font-weight: 800; color: white; 
-        font-family: "Source Sans Pro", sans-serif; margin: 0;
+        font-family: "Source Sans Pro", sans-serif; margin-bottom: 8px;
     }
-
-    /* --- CABEÇALHO DO PROJETO --- */
-    .header-box {
-        background-color: #161b22;
-        border: 1px solid #30363d;
-        border-radius: 10px;
-        padding: 25px;
-        margin-bottom: 20px;
-        margin-top: 10px;
-        display: flex; justify-content: space-between; align-items: center;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+    
+    .kpi-sub { 
+        font-size: 0.75rem; color: #8b949e; width: 100%;
+        border-top: 1px solid #21262d;
+        padding-top: 8px; margin-top: auto;
+        display: flex; justify-content: space-around;
     }
-    .header-title { color: white; font-size: 1.5rem; font-weight: 700; margin: 0; line-height: 1.2; }
-    .header-subtitle { color: #8b949e; font-size: 0.9rem; margin-top: 8px; }
-    .header-status { 
-        font-weight: 700; padding: 6px 14px; border-radius: 6px; 
-        color: white; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px;
-    }
-
-    /* Cores Auxiliares */
+    
     .txt-green { color: #3fb950; font-weight: bold; }
     .txt-red { color: #da3633; font-weight: bold; }
     .txt-blue { color: #58a6ff; font-weight: bold; }
-    .txt-orange { color: #d29922; font-weight: bold; }
     .txt-purple { color: #a371f7; font-weight: bold; }
+    .txt-orange { color: #d29922; font-weight: bold; }
+
+    /* --- CSS DOS CARDS DE PROJETO --- */
+    [data-testid="stVerticalBlockBorderWrapper"] {
+        background-color: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 0px !important; transition: transform 0.2s;
+    }
+    [data-testid="stVerticalBlockBorderWrapper"]:hover {
+        border-color: #58a6ff; transform: translateY(-2px);
+    }
+    .tile-header { padding: 15px 15px 10px 15px; }
+    .tile-title { color: white; font-weight: 700; font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px; }
+    .tile-sub { color: #8b949e; font-size: 0.75rem; }
+    .data-strip { background-color: #0d1117; border-top: 1px solid #21262d; border-bottom: 1px solid #21262d; padding: 10px 15px; display: flex; justify-content: space-between; align-items: center; }
+    .data-col { display: flex; flex-direction: column; align-items: center; width: 25%; }
+    .data-col:not(:last-child) { border-right: 1px solid #30363d; }
+    .data-lbl { font-size: 0.6rem; color: #8b949e; text-transform: uppercase; margin-bottom: 2px; }
+    .data-val { font-size: 0.85rem; font-weight: 700; color: #e6edf3; }
+    
+    .tile-footer { padding: 10px 15px; }
+    
+    /* Alinhamento da linha de rodapé (Status --- %) */
+    .footer-row { display: flex; justify-content: space-between; align-items: center; }
+    
+    .progress-track { background-color: #21262d; height: 4px; border-radius: 2px; width: 100%; margin-bottom: 10px; overflow: hidden; }
+    .badge-status { font-size: 0.65rem; font-weight: 700; text-transform: uppercase; padding: 2px 8px; border-radius: 4px; }
+    .footer-pct { font-size: 0.8rem; font-weight: 700; }
+    
+    div[data-testid="stVerticalBlockBorderWrapper"] button {
+        background-color: transparent; color: #58a6ff; border: 1px solid #30363d; border-radius: 4px;
+        font-size: 0.65rem !important; padding: 0px 0px !important; height: 24px !important; min-height: 24px !important; line-height: 1 !important; margin: 0; width: 100%;
+    }
 </style>
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# FUNÇÕES E DADOS (GOOGLE DRIVE .XLSX)
+# 2. DADOS E TRATAMENTO (GOOGLE DRIVE .XLSX)
 # ---------------------------------------------------------
-def format_currency(value):
-    if pd.isna(value): return "R$ 0,00"
-    return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
-def format_percent(value):
-    if pd.isna(value): return "0,0%"
-    return f"{value:.1f}%".replace(".", ",")
-
 @st.cache_data(ttl=30)
 def load_data():
     try:
+        # Autenticação via Secrets
         creds_dict = dict(st.secrets["gcp_service_account"])
         creds = service_account.Credentials.from_service_account_info(
             creds_dict,
@@ -99,6 +107,7 @@ def load_data():
         
         service = build('drive', 'v3', credentials=creds)
         
+        # Procura o arquivo pelo nome
         results = service.files().list(
             q="name='dados_dashboard_obras.xlsx' and trashed=false",
             fields="files(id, name)"
@@ -106,9 +115,12 @@ def load_data():
         files = results.get('files', [])
         
         if not files:
+            st.error("Arquivo 'dados_dashboard_obras.xlsx' não encontrado no Google Drive.")
             return None
             
         file_id = files[0]['id']
+        
+        # Baixa o arquivo para a memória
         request = service.files().get_media(fileId=file_id)
         file_io = io.BytesIO()
         downloader = MediaIoBaseDownload(file_io, request)
@@ -118,18 +130,24 @@ def load_data():
             status, done = downloader.next_chunk()
             
         file_io.seek(0)
+        
+        # Lê como Excel
         df = pd.read_excel(file_io)
         return df
+
     except Exception as e:
+        st.error(f"Erro na conexão com o Google Drive: {e}")
         return None
 
 df_raw = load_data()
 
 if df_raw is None:
-    st.error("⚠️ Erro ao conectar com o Google Sheets.")
     st.stop()
 
-# --- LIMPEZA DE DADOS (CRÍTICO) ---
+# --- LIMPEZA DE DADOS ---
+# Forçamos a conversão de IDs para String para evitar erro de comparação
+df_raw['Projeto'] = df_raw['Projeto'].astype(str)
+
 def clean_google_number(x):
     if isinstance(x, (int, float)):
         return float(x)
@@ -145,33 +163,33 @@ def clean_google_number(x):
     except:
         return 0.0
 
-# --- NOVO: LIMPEZA ESPECÍFICA PARA HORAS (Formato [h]:mm:ss) ---
+# --- NOVO: LIMPEZA BLINDADA PARA HORAS (Excel [h]:mm:ss) ---
 def clean_excel_time(x):
-    # Se for numérico (Excel armazena horas como fração de dias, ex: 1.5 = 36h)
-    if isinstance(x, (int, float)):
-        return float(x) * 24.0
-    
-    # Se for texto (ex: "25:30:00")
-    s = str(x).strip()
-    if s == "": return 0.0
-    
-    if ":" in s:
-        try:
+    try:
+        # Se for numérico direto (Excel armazena horas como fração de dia, ex: 1.0 = 24h)
+        if isinstance(x, (int, float)):
+            return float(x) * 24.0
+        
+        s = str(x).strip()
+        if s == "": return 0.0
+        
+        # Se for string com ":" (ex: "25:30:00")
+        if ":" in s:
             parts = s.split(":")
-            h = float(parts[0])
+            h = float(parts[0]) if len(parts) > 0 else 0
             m = float(parts[1]) if len(parts) > 1 else 0
             s_sec = float(parts[2]) if len(parts) > 2 else 0
             return h + (m/60) + (s_sec/3600)
-        except:
-            pass
-            
-    # Tenta limpeza padrão se não tiver dois pontos
-    return clean_google_number(x)
+        
+        # Se for string numérica (ex: "0.5" ou "1,5") -> Tratamos como fração de dia
+        val_clean = s.replace(',', '.')
+        return float(val_clean) * 24.0
+    except:
+        return 0.0
 
-# Colunas financeiras e percentuais (padrão)
+# 1. Colunas Padrão (Financeiro e %)
 cols_numericas_padrao = [
-    'Vendido', 'Faturado', 'Mat_Real', 'Desp_Real', 'HH_Real_Vlr', 'Impostos', 'Mat_Orc', 
-    'Desp_Orc', 'HH_Orc_Vlr', 'Conclusao_%'
+    'Vendido', 'Faturado', 'Mat_Real', 'Desp_Real', 'HH_Real_Vlr', 'Impostos', 'Mat_Orc', 'Conclusao_%'
 ]
 for col in cols_numericas_padrao:
     if col in df_raw.columns:
@@ -179,7 +197,7 @@ for col in cols_numericas_padrao:
     else:
         df_raw[col] = 0.0
 
-# Colunas de Horas (usando a nova função)
+# 2. Colunas de Horas (Tratamento Especial)
 cols_horas = ['HH_Orc_Qtd', 'HH_Real_Qtd']
 for col in cols_horas:
     if col in df_raw.columns:
@@ -187,7 +205,7 @@ for col in cols_horas:
     else:
         df_raw[col] = 0.0
 
-# --- CORREÇÃO DE ESCALA DE PORCENTAGEM (ITEM 1) ---
+# --- CORREÇÃO DE ESCALA DE PORCENTAGEM (Mantida) ---
 def fix_percentage_scale(x):
     if 0 < x <= 1.5:
         return x * 100
@@ -196,312 +214,292 @@ def fix_percentage_scale(x):
 if 'Conclusao_%' in df_raw.columns:
     df_raw['Conclusao_%'] = df_raw['Conclusao_%'].apply(fix_percentage_scale)
 
-# ---------------------------------------------------------
-# SIDEBAR
-# ---------------------------------------------------------
-st.sidebar.markdown("### Seleção de Projeto:") 
+# --- FORMATAÇÃO ---
+def format_brl_full(valor):
+    if pd.isna(valor): return "R$ 0,00"
+    return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-lista_projetos = sorted(df_raw['Projeto'].astype(str).unique())
-
-index_padrao = 0
-if "projeto_foco" in st.session_state:
-    try:
-        index_padrao = lista_projetos.index(str(st.session_state["projeto_foco"]))
-    except ValueError:
-        index_padrao = 0
-
-id_projeto = st.sidebar.selectbox("Projeto:", lista_projetos, index=index_padrao, label_visibility="collapsed")
-
-# Converter a coluna projeto para string para garantir o match
-df_raw['Projeto'] = df_raw['Projeto'].astype(str)
-dados = df_raw[df_raw['Projeto'] == id_projeto].iloc[0]
+def format_brl_short(valor):
+    if pd.isna(valor): return "R$ 0"
+    if valor >= 1_000_000: return f"R$ {valor/1_000_000:.1f}M".replace(".", ",")
+    elif valor >= 1_000: return f"R$ {valor/1_000:.1f}k".replace(".", ",")
+    else: return f"R$ {valor:,.0f}".replace(",", ".")
 
 # ---------------------------------------------------------
-# TÍTULO DA PÁGINA
+# 3. LÓGICA DE NEGÓCIO (PREFIXO 4 DÍGITOS)
 # ---------------------------------------------------------
-st.title("Painel de Obra")
 
-# ---------------------------------------------------------
-# CÁLCULOS
-# ---------------------------------------------------------
-custo_total = dados['Mat_Real'] + dados['Desp_Real'] + dados['HH_Real_Vlr'] + dados['Impostos']
-lucro_liquido = dados['Vendido'] - custo_total
-margem_real_pct = (lucro_liquido / dados['Vendido']) * 100 if dados['Vendido'] > 0 else 0
+PREFIXOS_ADM = ("5009", "5010", "5011")
 
-# --- CARREGAR META (CONFIG) ---
+mask_adm = df_raw['Projeto'].str.startswith(PREFIXOS_ADM)
+df_adm = df_raw[mask_adm].copy()
+df_obras = df_raw[~mask_adm].copy()
+
+# ========================================================
+# CÁLCULO CUSTOS INTERNOS
+# ========================================================
+cols_soma = ['Mat_Real', 'Desp_Real', 'HH_Real_Vlr']
+for col in cols_soma:
+    if col in df_adm.columns:
+        df_adm[col] = pd.to_numeric(df_adm[col], errors='coerce').fillna(0)
+
+custo_adm_total = (df_adm['Mat_Real'] + df_adm['Desp_Real'] + df_adm['HH_Real_Vlr']).sum()
+# ========================================================
+
+def get_custo_total_row_obras(row):
+    return row['Mat_Real'] + row['Desp_Real'] + row['HH_Real_Vlr'] + row['Impostos']
+
+# Cálculos Macro
+status_venda = ['Não iniciado', 'Em andamento', 'Finalizado', 'Apresentado']
+df_carteira_total = df_obras[df_obras['Status'].isin(status_venda)]
+valor_vendido_total = df_carteira_total['Vendido'].sum()
+
+df_concluido = df_obras[df_obras['Status'].isin(['Finalizado', 'Apresentado'])]
+valor_concluido = df_concluido['Vendido'].sum()
+valor_faturado_total = df_obras['Faturado'].sum()
+
+overhead_pct = (custo_adm_total / valor_vendido_total * 100) if valor_vendido_total > 0 else 0
+
+# Cálculos de Margem
+def get_margem_ponderada(df_in):
+    if df_in.empty: return 0.0
+    venda = df_in['Vendido'].sum()
+    custo = df_in.apply(get_custo_total_row_obras, axis=1).sum()
+    return ((venda - custo) / venda * 100) if venda > 0 else 0
+
+mg_geral = get_margem_ponderada(df_obras)
+mg_concluida = get_margem_ponderada(df_concluido)
+
+custo_obras_total = df_obras.apply(get_custo_total_row_obras, axis=1).sum()
+lucro_bruto_total = valor_vendido_total - custo_obras_total
+lucro_liquido_final = lucro_bruto_total - custo_adm_total
+mg_liquida_pos_adm = (lucro_liquido_final / valor_vendido_total * 100) if valor_vendido_total > 0 else 0
+
+df_aberto = df_obras[df_obras['Status'].isin(['Em andamento', 'Não iniciado'])]
+qtd_aberto = len(df_aberto)
+qtd_total = len(df_obras) 
+
+# --- CARREGAR METAS (CONFIG) ---
 def load_config():
     default_data = {"meta_vendas": 5000000.0, "meta_margem": 25.0, "meta_custo_adm": 5.0}
     if not os.path.exists("config.json"):
         with open("config.json", "w") as f:
             json.dump(default_data, f)
         return default_data
+    
     with open("config.json", "r") as f:
         data = json.load(f)
         if "meta_custo_adm" not in data: data["meta_custo_adm"] = 5.0
         return data
 
 config = load_config()
+META_VENDAS = float(config["meta_vendas"])
 META_MARGEM_BRUTA = float(config["meta_margem"])
-
-# Definição de Cores Padronizadas
-status = dados['Status']
-if status == "Finalizado":
-    cor_status, bg_status = "#3fb950", "rgba(63, 185, 80, 0.2)"
-elif status == "Apresentado":
-    cor_status, bg_status = "#a371f7", "rgba(163, 113, 247, 0.2)"
-elif status == "Em andamento":
-    cor_status, bg_status = "#d29922", "rgba(210, 153, 34, 0.2)"
-else:
-    cor_status, bg_status = "#da3633", "rgba(218, 54, 51, 0.2)"
+META_CUSTO_ADM = float(config["meta_custo_adm"])
+META_MARGEM_LIQUIDA = META_MARGEM_BRUTA - META_CUSTO_ADM
 
 # ---------------------------------------------------------
-# CABEÇALHO DO PROJETO
+# 4. INTERFACE
 # ---------------------------------------------------------
-st.markdown(f"""
-<div class="header-box" style="border-top: 5px solid {cor_status};">
-    <div>
-        <div class="header-title">{dados['Projeto']} - {dados['Descricao']}</div>
-        <div class="header-subtitle">
-            {dados['Cliente']} | {dados['Cidade']}
-        </div>
-    </div>
-    <div class="header-status" style="background-color: {bg_status}; color: {cor_status}; border: 1px solid {cor_status};">
-        {dados['Status']}
-    </div>
-</div>
-""", unsafe_allow_html=True)
+st.title("Gestão da Carteira")
 
-# ---------------------------------------------------------
-# KPI CARDS
-# ---------------------------------------------------------
-k1, k2, k3, k4 = st.columns(4)
+# LINHA 1 (3 Colunas) - KPIS GRANDES
+row1_c1, row1_c2, row1_c3 = st.columns(3)
 
-# Card 1: Vendido
-with k1:
+pct_meta_venda = (valor_vendido_total / META_VENDAS * 100)
+with row1_c1:
     st.markdown(f"""
     <div class="kpi-card" style="border-top: 4px solid #58a6ff;">
         <div class="kpi-title">Valor Vendido</div>
-        <div class="kpi-val">{format_currency(dados['Vendido'])}</div>
+        <div class="kpi-val">{format_brl_full(valor_vendido_total)}</div>
+        <div class="kpi-sub">
+            <span>Meta: {pct_meta_venda:.0f}%</span>
+            <span class="txt-blue">{format_brl_full(valor_faturado_total)} faturados</span>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
-# Card 2: Faturado
-with k2:
+pct_concluido_carteira = (valor_concluido / valor_vendido_total * 100) if valor_vendido_total > 0 else 0
+pct_meta_concluido = (valor_concluido / META_VENDAS * 100)
+with row1_c2:
     st.markdown(f"""
     <div class="kpi-card" style="border-top: 4px solid #3fb950;">
-        <div class="kpi-title">Valor Faturado</div>
-        <div class="kpi-val">{format_currency(dados['Faturado'])}</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-# Card 3: Lucro
-cor_lucro = "txt-green" if lucro_liquido > 0 else "txt-red"
-border_lucro = "#3fb950" if lucro_liquido > 0 else "#da3633"
-with k3:
-    st.markdown(f"""
-    <div class="kpi-card" style="border-top: 4px solid {border_lucro};">
-        <div class="kpi-title">Lucro Líquido</div>
-        <div class="kpi-val {cor_lucro}">{format_currency(lucro_liquido)}</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-# Card 4: Margem
-cor_margem = "txt-green" if margem_real_pct >= META_MARGEM_BRUTA else "txt-red"
-border_margem = "#3fb950" if margem_real_pct >= META_MARGEM_BRUTA else "#da3633"
-with k4:
-    st.markdown(f"""
-    <div class="kpi-card" style="border-top: 4px solid {border_margem};">
-        <div class="kpi-title">Margem %</div>
-        <div class="kpi-val {cor_margem}">{format_percent(margem_real_pct)}</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-st.write("")
-st.divider()
-
-# ---------------------------------------------------------
-# SEÇÃO 1: EFICIÊNCIA OPERACIONAL
-# ---------------------------------------------------------
-st.subheader("⚙️ Eficiência Operacional")
-
-with st.container(border=True):
-    col_gauges, col_spacer, col_diag = st.columns([5, 0.2, 3], vertical_alignment="center")
-    
-    with col_gauges:
-        fig_gauge = go.Figure()
-
-        # Gauge 1: Físico
-        fig_gauge.add_trace(go.Indicator(
-            mode = "gauge+number", value = dados['Conclusao_%'],
-            title = {'text': "Avanço Físico", 'font': {'size': 14, 'color': '#8b949e'}},
-            domain = {'x': [0, 0.45], 'y': [0, 1]},
-            number = {'suffix': "%", 'font': {'color': 'white'}},
-            gauge = {
-                'axis': {'range': [0, 100], 'tickcolor': "#30363d"},
-                'bar': {'color': "#3fb950"}, 
-                'bgcolor': "#0d1117", 'borderwidth': 2, 'bordercolor': "#30363d"
-            }
-        ))
-
-        # ---------------------------------------------------------------------------------
-        # ATUALIZADO: LÓGICA PADRÃO (Real = HH_Real_Qtd, Orçado = HH_Orc_Qtd)
-        # ---------------------------------------------------------------------------------
-        hh_real = dados['HH_Real_Qtd'] # REAL = Coluna Real_Qtd
-        hh_orc = dados['HH_Orc_Qtd']   # ORÇADO = Coluna Orc_Qtd
-
-        perc_hh = (hh_real / hh_orc * 100) if hh_orc > 0 else 0
-        cor_hh = "#da3633" if perc_hh > (dados['Conclusao_%'] + 10) else "#58a6ff"
-
-        fig_gauge.add_trace(go.Indicator(
-            mode = "gauge+number", value = perc_hh,
-            title = {'text': "Consumo Horas", 'font': {'size': 14, 'color': '#8b949e'}},
-            domain = {'x': [0.55, 1], 'y': [0, 1]},
-            number = {'suffix': "%", 'valueformat': ".1f", 'font': {'color': 'white'}},
-            gauge = {
-                'axis': {'range': [0, max(100, perc_hh)], 'tickcolor': "#30363d"},
-                'bar': {'color': cor_hh},
-                'bgcolor': "#0d1117", 'borderwidth': 2, 'bordercolor': "#30363d",
-                'threshold': {'line': {'color': "white", 'width': 3}, 'thickness': 0.75, 'value': dados['Conclusao_%']}
-            }
-        ))
-        
-        fig_gauge.update_layout(
-            height=220, margin=dict(t=40, b=20, l=30, r=30), 
-            paper_bgcolor='rgba(0,0,0,0)', font={'color': "white"},
-            xaxis={'fixedrange': True}, yaxis={'fixedrange': True}
-        )
-        st.plotly_chart(fig_gauge, use_container_width=True, config={'displayModeBar': False})
-
-    with col_diag:
-        # ---------------------------------------------------------------------------------
-        # ATUALIZADO: SALDO = ORÇADO (HH_Orc_Qtd) - REAL (HH_Real_Qtd)
-        # ---------------------------------------------------------------------------------
-        saldo_hh = hh_orc - hh_real
-        
-        try:
-            saldo_hh_int = int(saldo_hh)
-        except:
-            saldo_hh_int = 0
-        
-        if perc_hh > (dados['Conclusao_%'] + 10):
-            border_c = "#da3633" 
-            titulo = "Baixa Eficiência"
-            texto = "O consumo de horas está desproporcional ao avanço físico."
-            saldo_txt = f"Excedente: {abs(saldo_hh_int)}h"
-        elif perc_hh < dados['Conclusao_%']:
-            border_c = "#3fb950"
-            titulo = "Alta Eficiência"
-            texto = "A obra está avançada economizando horas."
-            saldo_txt = f"Saldo Positivo: {saldo_hh_int}h"
-        else:
-            border_c = "#58a6ff"
-            titulo = "Equilibrado"
-            texto = "O ritmo segue conforme o planejado."
-            saldo_txt = f"Saldo: {saldo_hh_int}h"
-
-        st.markdown(f"""
-        <div style="background-color: #161b22; border-left: 4px solid {border_c}; padding: 15px; border-radius: 4px;">
-            <strong style="color: {border_c}; font-size: 1.1rem;">{titulo}</strong><br>
-            <span style="color: #8b949e; font-size: 0.9rem;">{texto}</span><br><br>
-            <strong style="color: white;">{saldo_txt}</strong>
+        <div class="kpi-title">Valor Concluído</div>
+        <div class="kpi-val">{format_brl_full(valor_concluido)}</div>
+        <div class="kpi-sub">
+            <span>Meta: {pct_meta_concluido:.0f}%</span>
+            <span class="txt-green">{pct_concluido_carteira:.0f}% do total</span>
         </div>
-        """, unsafe_allow_html=True)
+    </div>
+    """, unsafe_allow_html=True)
+
+cor_adm = "txt-red" if overhead_pct > META_CUSTO_ADM else "txt-orange"
+with row1_c3:
+    st.markdown(f"""
+    <div class="kpi-card" style="border-top: 4px solid #d29922;">
+        <div class="kpi-title">Custos internos</div>
+        <div class="kpi-val">{format_brl_full(custo_adm_total)}</div>
+        <div class="kpi-sub">
+            <span class="{cor_adm}" style="font-weight:bold">{overhead_pct:.1f}% do valor vendido</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
 st.write("")
+
+# LINHA 2 (4 Colunas) - MARGENS
+row2_c1, row2_c2, row2_c3, row2_c4 = st.columns(4)
+
+cor_m_geral = "txt-green" if mg_geral >= META_MARGEM_BRUTA else "txt-red"
+with row2_c1:
+    st.markdown(f"""
+    <div class="kpi-card" style="border-top: 4px solid #8b949e;">
+        <div class="kpi-title">Margem total</div>
+        <div class="kpi-val {cor_m_geral}">{mg_geral:.1f}%</div>
+        <div class="kpi-sub">
+            <span>Obras vendidas</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+cor_m_conc = "txt-green" if mg_concluida >= META_MARGEM_BRUTA else "txt-red"
+with row2_c2:
+    st.markdown(f"""
+    <div class="kpi-card" style="border-top: 4px solid #8b949e;">
+        <div class="kpi-title">Margem concluída</div>
+        <div class="kpi-val {cor_m_conc}">{mg_concluida:.1f}%</div>
+        <div class="kpi-sub">
+            <span>Obras concluidas</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+cor_m_liq = "txt-green" if mg_liquida_pos_adm >= META_MARGEM_LIQUIDA else "txt-red"
+with row2_c3:
+    st.markdown(f"""
+    <div class="kpi-card" style="border-top: 4px solid #8b949e;">
+        <div class="kpi-title">Margem líquida</div>
+        <div class="kpi-val {cor_m_liq}">{mg_liquida_pos_adm:.1f}%</div>
+        <div class="kpi-sub">
+            <span>Descontado custos internos</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+with row2_c4:
+    st.markdown(f"""
+    <div class="kpi-card" style="border-top: 4px solid #8b949e;">
+        <div class="kpi-title">Orçamentos</div>
+        <div class="kpi-val">{qtd_aberto} <span style='font-size:1.2rem; color:#8b949e'>/ {qtd_total}</span></div>
+        <div class="kpi-sub">
+            <span>Quantidade em aberto/total</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
 st.divider()
 
 # ---------------------------------------------------------
-# SEÇÃO 2: COMPOSIÇÃO DE RESULTADO
+# 5. CARDS DE PROJETOS (TILES)
 # ---------------------------------------------------------
-st.subheader("📊 Composição do Lucro")
 
-with st.container(border=True):
-    modo_vis = st.radio("Unidade de Medida:", ["Percentual (%)", "Valores (R$)"], horizontal=True, label_visibility="collapsed")
+def calcular_dados_extras(row):
+    vendido = row['Vendido']
+    custo = row['Mat_Real'] + row['Desp_Real'] + row['HH_Real_Vlr'] + row['Impostos']
+    lucro = vendido - custo
+    margem = (lucro / vendido * 100) if vendido > 0 else 0
     
-    labels = ["Vendido", "Impostos", "Materiais", "Despesas", "Mão de Obra", "Lucro"]
+    # ATUALIZADO: Usando nomes de colunas ORIGINAIS (Real = Real, Orc = Orc)
+    hh_orc, hh_real = row['HH_Orc_Qtd'], row['HH_Real_Qtd']
     
-    if modo_vis == "Valores (R$)":
-        vals = [dados['Vendido'], -dados['Impostos'], -dados['Mat_Real'], -dados['Desp_Real'], -dados['HH_Real_Vlr'], lucro_liquido]
-        text_vals = [format_currency(v).replace("R$ ", "") for v in vals]
-    else:
-        base = dados['Vendido'] if dados['Vendido'] > 0 else 1
-        vals = [100, -(dados['Impostos']/base)*100, -(dados['Mat_Real']/base)*100, -(dados['Desp_Real']/base)*100, -(dados['HH_Real_Vlr']/base)*100, (lucro_liquido/base)*100]
-        text_vals = [format_percent(v) for v in vals]
+    hh_perc = (hh_real / hh_orc * 100) if hh_orc > 0 else 0
+    fisico = row['Conclusao_%']
+    critico = False
+    
+    if (margem < META_MARGEM_BRUTA and row['Status'] != 'Apresentado') or (hh_perc > fisico + 10):
+        critico = True
+    return pd.Series([margem, critico, hh_perc])
 
-    fig_water = go.Figure(go.Waterfall(
-        orientation = "v", measure = ["relative"]*5 + ["total"],
-        x = labels, y = vals, text = text_vals, textposition = "outside",
-        connector = {"line":{"color":"#30363d"}},
-        decreasing = {"marker":{"color":"#da3633"}}, 
-        increasing = {"marker":{"color":"#3fb950"}}, 
-        totals = {"marker":{"color":"#58a6ff"}},        
-        cliponaxis = False
-    ))
-    
-    fig_water.update_layout(
-        height=320, margin=dict(t=50, b=10, l=10, r=10),
-        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-        yaxis=dict(showgrid=True, gridcolor='#30363d', zeroline=False, fixedrange=True),
-        xaxis=dict(tickfont=dict(color='white'), fixedrange=True),
-        font=dict(color='white')
-    )
-    st.plotly_chart(fig_water, use_container_width=True, config={'displayModeBar': False})
+cols_extras = df_obras.apply(calcular_dados_extras, axis=1)
+df_obras['Margem_%'] = cols_extras[0]
+df_obras['E_Critico'] = cols_extras[1]
+df_obras['HH_Progresso'] = cols_extras[2]
 
+# --- BARRA DE FILTROS ---
+col_filtro, col_sort_criterio, col_sort_ordem = st.columns([3, 1, 1])
+
+with col_filtro:
+    status_options = ["Não iniciado", "Em andamento", "Finalizado", "Apresentado"]
+    status_selecionados = st.multiselect("Filtrar por:", options=status_options, default=status_options)
+
+with col_sort_criterio:
+    criterio_sort = st.selectbox("Ordenar por:", ["Projeto", "Valor Vendido", "Margem", "Andamento"])
+
+with col_sort_ordem:
+    direcao_sort = st.selectbox("Ordem:", ["Decrescente", "Crescente"])
+
+if not status_selecionados:
+    st.info("Selecione pelo menos um status acima.")
+    st.stop() 
+
+df_show = df_obras[df_obras['Status'].isin(status_selecionados)].copy()
+eh_crescente = True if direcao_sort == "Crescente" else False
+mapa_sort = {"Projeto": "Projeto", "Valor Vendido": "Vendido", "Margem": "Margem_%", "Andamento": "Conclusao_%"}
+df_show = df_show.sort_values(by=mapa_sort[criterio_sort], ascending=eh_crescente)
+
+st.write(f"**{len(df_show)}** projetos encontrados")
 st.write("")
-st.divider()
 
-# ---------------------------------------------------------
-# SEÇÃO 3: DETALHAMENTO DE CUSTOS
-# ---------------------------------------------------------
-st.subheader("🔎 Detalhamento de Custos")
+cols = st.columns(3)
 
-def plot_row_fixed(titulo, orcado, real):
-    pct = (real / orcado * 100) if orcado > 0 else 0
-    cor_real = "#da3633" if real > orcado else "#58a6ff"
-    
-    fig = go.Figure()
-    
-    fig.add_trace(go.Bar(
-        y=[titulo], x=[orcado], name='Orçado', orientation='h', 
-        marker_color='#30363d', 
-        text=[format_currency(orcado)], textposition='outside',
-        cliponaxis=False
-    ))
-    
-    fig.add_trace(go.Bar(
-        y=[titulo], x=[real], name='Realizado', orientation='h', 
-        marker_color=cor_real, 
-        text=[format_currency(real)], textposition='outside',
-        cliponaxis=False 
-    ))
+for i, (index, row) in enumerate(df_show.iterrows()):
+    with cols[i % 3]:
+        pct = int(row['Conclusao_%'])
+        status_raw = str(row['Status']).strip()
+        
+        if status_raw == "Finalizado": cor_t, bg_b, cl_b = "#3fb950", "rgba(63,185,80,0.2)", "#3fb950"
+        elif status_raw == "Apresentado": cor_t, bg_b, cl_b = "#a371f7", "rgba(163,113,247,0.2)", "#a371f7"
+        elif status_raw == "Em andamento": cor_t, bg_b, cl_b = "#d29922", "rgba(210,153,34,0.2)", "#e3b341"
+        else: cor_t, bg_b, cl_b = "#da3633", "rgba(218,54,51,0.2)", "#f85149"
 
-    max_val = max(orcado, real) * 1.35 
-    
-    fig.update_layout(
-        title=dict(text=f"<b>{titulo}</b> <span style='color:#8b949e; font-size:14px'>- Consumo: {format_percent(pct)}</span>", x=0),
-        barmode='group',
-        height=140,
-        margin=dict(l=0, r=20, t=30, b=10),
-        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-        xaxis=dict(showgrid=True, gridcolor='#262730', showticklabels=False, range=[0, max_val], fixedrange=True),
-        yaxis=dict(showticklabels=False, fixedrange=True),
-        font=dict(color='white'),
-        showlegend=True,
-        legend=dict(
-            orientation="h",
-            yanchor="bottom", y=1.02,
-            xanchor="right", x=1,
-            font=dict(size=12, color="#8b949e"),
-            bgcolor="rgba(0,0,0,0)"
-        )
-    )
-    return fig
+        cor_margem = "#da3633" if row['Margem_%'] < META_MARGEM_BRUTA else "#3fb950"
+        
+        # ATUALIZADO: Usando nomes de colunas ORIGINAIS (Real = Real, Orc = Orc)
+        hh_real = row['HH_Real_Qtd']
+        hh_orc = row['HH_Orc_Qtd']
+        
+        pct_horas = (hh_real / hh_orc * 100) if hh_orc > 0 else 0
+        cor_horas = "#da3633" if pct_horas > 100 else "#e6edf3"
+        
+        mat_orc, mat_real = row['Mat_Orc'], row['Mat_Real']
+        pct_mat = (mat_real / mat_orc * 100) if mat_orc > 0 else 0
+        cor_mat = "#da3633" if pct_mat > 100 else "#e6edf3"
+        
+        valor_formatado = format_brl_short(row['Vendido'])
+        
+        with st.container(border=True):
+            st.markdown(f"""
+            <div class="tile-header" style="border-left: 3px solid {cor_t}">
+                <div class="tile-title" title="{row['Projeto']}">{row['Projeto']} - {row['Descricao']}</div>
+                <div class="tile-sub">{row['Cliente']} | {row['Cidade']}</div>
+            </div>
+            <div class="data-strip">
+                <div class="data-col"><span class="data-lbl">Valor</span><span class="data-val">{valor_formatado}</span></div>
+                <div class="data-col"><span class="data-lbl">Margem</span><span class="data-val" style="color: {cor_margem}">{row['Margem_%']:.0f}%</span></div>
+                <div class="data-col"><span class="data-lbl">Horas</span><span class="data-val" style="color: {cor_horas}">{pct_horas:.0f}%</span></div>
+                <div class="data-col"><span class="data-lbl">Mat</span><span class="data-val" style="color: {cor_mat}">{pct_mat:.0f}%</span></div>
+            </div>
+            <div class="tile-footer">
+                <div class="progress-track"><div class="progress-fill" style="width: {pct}%; background-color: {cor_t};"></div></div>
+                <div class="footer-row">
+                    <span class="badge-status" style="background-color: {bg_b}; color: {cl_b}">{status_raw}</span>
+                    <span class="footer-pct" style="color: {cl_b}">{pct}%</span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
 
-with st.container(border=True):
-    st.plotly_chart(plot_row_fixed("Materiais", dados['Mat_Orc'], dados['Mat_Real']), use_container_width=True, config={'displayModeBar': False})
-
-with st.container(border=True):
-    st.plotly_chart(plot_row_fixed("Despesas", dados['Desp_Orc'], dados['Desp_Real']), use_container_width=True, config={'displayModeBar': False})
-
-with st.container(border=True):
-    st.plotly_chart(plot_row_fixed("Mão de Obra (R$)", dados['HH_Orc_Vlr'], dados['HH_Real_Vlr']), use_container_width=True, config={'displayModeBar': False})
+            col_sp, col_btn = st.columns([2, 1])
+            with col_btn:
+                if st.button("Abrir ↗", key=f"btn_{row['Projeto']}", use_container_width=True):
+                    st.session_state["projeto_foco"] = row['Projeto']
+                    st.switch_page("painel_obra.py")
