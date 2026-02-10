@@ -145,19 +145,49 @@ def clean_google_number(x):
     except:
         return 0.0
 
-cols_numericas = [
-    'Vendido', 'Faturado', 'Mat_Real', 'Desp_Real', 'HH_Real_Vlr', 'Impostos', 'Mat_Orc', 
-    'Desp_Orc', 'HH_Orc_Vlr', 'HH_Orc_Qtd', 'HH_Real_Qtd', 'Conclusao_%'
-]
+# --- NOVO: LIMPEZA ESPECÍFICA PARA HORAS (Formato [h]:mm:ss) ---
+def clean_excel_time(x):
+    # Se for numérico (Excel armazena horas como fração de dias, ex: 1.5 = 36h)
+    if isinstance(x, (int, float)):
+        return float(x) * 24.0
+    
+    # Se for texto (ex: "25:30:00")
+    s = str(x).strip()
+    if s == "": return 0.0
+    
+    if ":" in s:
+        try:
+            parts = s.split(":")
+            h = float(parts[0])
+            m = float(parts[1]) if len(parts) > 1 else 0
+            s_sec = float(parts[2]) if len(parts) > 2 else 0
+            return h + (m/60) + (s_sec/3600)
+        except:
+            pass
+            
+    # Tenta limpeza padrão se não tiver dois pontos
+    return clean_google_number(x)
 
-for col in cols_numericas:
+# Colunas financeiras e percentuais (padrão)
+cols_numericas_padrao = [
+    'Vendido', 'Faturado', 'Mat_Real', 'Desp_Real', 'HH_Real_Vlr', 'Impostos', 'Mat_Orc', 
+    'Desp_Orc', 'HH_Orc_Vlr', 'Conclusao_%'
+]
+for col in cols_numericas_padrao:
     if col in df_raw.columns:
         df_raw[col] = df_raw[col].apply(clean_google_number)
     else:
         df_raw[col] = 0.0
 
+# Colunas de Horas (usando a nova função)
+cols_horas = ['HH_Orc_Qtd', 'HH_Real_Qtd']
+for col in cols_horas:
+    if col in df_raw.columns:
+        df_raw[col] = df_raw[col].apply(clean_excel_time)
+    else:
+        df_raw[col] = 0.0
+
 # --- CORREÇÃO DE ESCALA DE PORCENTAGEM (ITEM 1) ---
-# Se o valor vier como decimal (ex: 0.5 para 50%), multiplica por 100
 def fix_percentage_scale(x):
     if 0 < x <= 1.5:
         return x * 100
@@ -314,12 +344,10 @@ with st.container(border=True):
         ))
 
         # ---------------------------------------------------------------------------------
-        # CORREÇÃO ITEM 2 e 3: INVERSÃO DE VARIÁVEIS CONFORME SOLICITADO
-        # Quantidade Real = coluna HH_Orc_Qtd
-        # Quantidade Orçada = coluna HH_Real_Qtd
+        # ATUALIZADO: LÓGICA PADRÃO (Real = HH_Real_Qtd, Orçado = HH_Orc_Qtd)
         # ---------------------------------------------------------------------------------
-        hh_real = dados['HH_Orc_Qtd'] # Agora puxa de Orc_Qtd
-        hh_orc = dados['HH_Real_Qtd'] # Agora puxa de Real_Qtd
+        hh_real = dados['HH_Real_Qtd'] # REAL = Coluna Real_Qtd
+        hh_orc = dados['HH_Orc_Qtd']   # ORÇADO = Coluna Orc_Qtd
 
         perc_hh = (hh_real / hh_orc * 100) if hh_orc > 0 else 0
         cor_hh = "#da3633" if perc_hh > (dados['Conclusao_%'] + 10) else "#58a6ff"
@@ -346,7 +374,7 @@ with st.container(border=True):
 
     with col_diag:
         # ---------------------------------------------------------------------------------
-        # CORREÇÃO ITEM 3: SALDO = ORÇADO - REAL (com variáveis invertidas)
+        # ATUALIZADO: SALDO = ORÇADO (HH_Orc_Qtd) - REAL (HH_Real_Qtd)
         # ---------------------------------------------------------------------------------
         saldo_hh = hh_orc - hh_real
         
