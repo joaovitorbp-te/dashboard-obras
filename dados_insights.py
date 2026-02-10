@@ -8,7 +8,7 @@ from googleapiclient.http import MediaIoBaseDownload
 import io
 import json
 import os
-import gspread # Adicionado
+import gspread 
 
 # ---------------------------------------------------------
 # 1. CONFIGURAÇÃO VISUAL
@@ -29,23 +29,32 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# 2. CARREGAR CONFIGURAÇÕES (SHEET2)
+# 2. CARREGAR CONFIGURAÇÕES (SHEET2) - SEM CACHE NO CÓDIGO
 # ---------------------------------------------------------
 @st.cache_data(ttl=30)
 def load_config():
-    default = {"meta_vendas": 5000000.0, "meta_margem": 25.0, "meta_custo_adm": 5.0}
+    # Zeros para evidenciar erro
+    zeros = {"meta_vendas": 0.0, "meta_margem": 0.0, "meta_custo_adm": 0.0}
     try:
-        gc = gspread.service_account_from_dict(st.secrets["gcp_service_account"])
+        scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+        gc = gspread.service_account_from_dict(st.secrets["gcp_service_account"], scopes=scopes)
         sh = gc.open("dados_dashboard_obras")
         ws = sh.worksheet("Sheet2")
         vals = ws.row_values(2)
         if len(vals) >= 3:
-            def parse(x):
-                clean = str(x).replace("R$", "").replace("%", "").replace(".", "").replace(",", ".").strip()
-                return float(clean) if clean else 0.0
-            return {"meta_vendas": parse(vals[0]), "meta_margem": parse(vals[1]), "meta_custo_adm": parse(vals[2])}
-        return default
-    except: return default
+            def parse_pt_br(x):
+                if isinstance(x, (int, float)): return float(x)
+                clean = str(x).replace("R$", "").replace("%", "").strip()
+                clean = clean.replace(".", "").replace(",", ".")
+                try: return float(clean)
+                except: return 0.0
+            return {
+                "meta_vendas": parse_pt_br(vals[0]),
+                "meta_margem": parse_pt_br(vals[1]),
+                "meta_custo_adm": parse_pt_br(vals[2])
+            }
+        return zeros
+    except: return zeros
 
 config = load_config()
 META_MARGEM = float(config["meta_margem"])
