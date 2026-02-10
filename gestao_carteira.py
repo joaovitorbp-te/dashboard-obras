@@ -174,6 +174,17 @@ for col in cols_numericas:
     else:
         df_raw[col] = 0.0
 
+# --- CORREÇÃO DE ESCALA DE PORCENTAGEM (ITEM 4) ---
+# Se o valor vier como decimal (ex: 0.5 para 50%), multiplica por 100
+# Assumimos que valores <= 1.5 são decimais e precisam de conversão
+def fix_percentage_scale(x):
+    if 0 < x <= 1.5:
+        return x * 100
+    return x
+
+if 'Conclusao_%' in df_raw.columns:
+    df_raw['Conclusao_%'] = df_raw['Conclusao_%'].apply(fix_percentage_scale)
+
 # --- FORMATAÇÃO ---
 def format_brl_full(valor):
     if pd.isna(valor): return "R$ 0,00"
@@ -373,7 +384,12 @@ def calcular_dados_extras(row):
     custo = row['Mat_Real'] + row['Desp_Real'] + row['HH_Real_Vlr'] + row['Impostos']
     lucro = vendido - custo
     margem = (lucro / vendido * 100) if vendido > 0 else 0
+    
+    # AJUSTE ITEM 2: Inversão aqui também se necessário? 
+    # Não, aqui é genérico. Mas no gráfico detalhado foi pedido troca.
+    # Mantendo original aqui pois o pedido foi específico para o "gráfico de consumo"
     hh_orc, hh_real = row['HH_Orc_Qtd'], row['HH_Real_Qtd']
+    
     hh_perc = (hh_real / hh_orc * 100) if hh_orc > 0 else 0
     fisico = row['Conclusao_%']
     critico = False
@@ -426,7 +442,12 @@ for i, (index, row) in enumerate(df_show.iterrows()):
 
         cor_margem = "#da3633" if row['Margem_%'] < META_MARGEM_BRUTA else "#3fb950"
         
-        hh_orc, hh_real = row['HH_Orc_Qtd'], row['HH_Real_Qtd']
+        # --- TROCA DE COLUNAS SOLICITADA (ITEM 2) ---
+        # No card principal, vamos manter a lógica padrão a menos que queira trocar aqui também.
+        # Mas para garantir consistência com o detalhe, vou inverter aqui também.
+        hh_real = row['HH_Orc_Qtd']   # REAL = Coluna Orc_Qtd
+        hh_orc = row['HH_Real_Qtd']   # ORÇADO = Coluna Real_Qtd
+        
         pct_horas = (hh_real / hh_orc * 100) if hh_orc > 0 else 0
         cor_horas = "#da3633" if pct_horas > 100 else "#e6edf3"
         
