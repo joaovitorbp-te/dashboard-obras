@@ -6,6 +6,7 @@ from googleapiclient.http import MediaIoBaseDownload
 import io
 import json
 import os
+import datetime # Adicionado para tratar objetos de tempo
 
 # ---------------------------------------------------------
 # 1. CONFIGURAÇÃO VISUAL
@@ -81,10 +82,8 @@ st.markdown("""
     /* Alinhamento da linha de rodapé (Status --- %) */
     .footer-row { display: flex; justify-content: space-between; align-items: center; }
     
-    /* --- BARRA DE PROGRESSO (CORREÇÃO AQUI) --- */
     .progress-track { background-color: #21262d; height: 6px; border-radius: 3px; width: 100%; margin-bottom: 10px; overflow: hidden; }
     .progress-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease-in-out; } 
-    /* ------------------------------------------ */
 
     .badge-status { font-size: 0.65rem; font-weight: 700; text-transform: uppercase; padding: 2px 8px; border-radius: 4px; }
     .footer-pct { font-size: 0.8rem; font-weight: 700; }
@@ -148,8 +147,10 @@ df_raw = load_data()
 if df_raw is None:
     st.stop()
 
-# --- LIMPEZA DE DADOS ---
-# Forçamos a conversão de IDs para String para evitar erro de comparação
+# --- LIMPEZA DE CABEÇALHOS (EVITA ERRO DE COLUNA NÃO ENCONTRADA) ---
+df_raw.columns = df_raw.columns.str.strip() 
+
+# --- LIMPEZA DE DADOS FINANCEIROS ---
 df_raw['Projeto'] = df_raw['Projeto'].astype(str)
 
 def clean_google_number(x):
@@ -167,9 +168,17 @@ def clean_google_number(x):
     except:
         return 0.0
 
-# --- NOVO: LIMPEZA BLINDADA PARA HORAS (Excel [h]:mm:ss) ---
+# --- NOVO: LIMPEZA BLINDADA PARA HORAS (Trata datetime.time, texto e frações) ---
 def clean_excel_time(x):
     try:
+        # Se for objeto datetime.time (comum em leitura de Excel)
+        if isinstance(x, datetime.time):
+            return x.hour + (x.minute / 60.0) + (x.second / 3600.0)
+        
+        # Se for objeto datetime.datetime
+        if isinstance(x, datetime.datetime):
+            return x.hour + (x.minute / 60.0) + (x.second / 3600.0)
+
         # Se for numérico direto (Excel armazena horas como fração de dia, ex: 1.0 = 24h)
         if isinstance(x, (int, float)):
             return float(x) * 24.0
@@ -191,7 +200,7 @@ def clean_excel_time(x):
     except:
         return 0.0
 
-# 1. Colunas Padrão (Financeiro e %)
+# 1. Aplica limpeza padrão
 cols_numericas_padrao = [
     'Vendido', 'Faturado', 'Mat_Real', 'Desp_Real', 'HH_Real_Vlr', 'Impostos', 'Mat_Orc', 'Conclusao_%'
 ]
@@ -201,7 +210,7 @@ for col in cols_numericas_padrao:
     else:
         df_raw[col] = 0.0
 
-# 2. Colunas de Horas (Tratamento Especial)
+# 2. Aplica limpeza de horas
 cols_horas = ['HH_Orc_Qtd', 'HH_Real_Qtd']
 for col in cols_horas:
     if col in df_raw.columns:
@@ -209,11 +218,9 @@ for col in cols_horas:
     else:
         df_raw[col] = 0.0
 
-# --- CORREÇÃO DE ESCALA DE PORCENTAGEM ---
-# Se o valor vier como decimal (ex: 0.1 para 10%), multiplica por 100
-# Se o valor vier como inteiro (ex: 10 para 10%), mantém
+# --- CORREÇÃO DE ESCALA DE PORCENTAGEM (Mantida) ---
 def fix_percentage_scale(x):
-    if 0 < x <= 1.5: # Consideramos que qualquer coisa <= 1.5 é fração decimal (150%)
+    if 0 < x <= 1.5:
         return x * 100
     return x
 
@@ -415,6 +422,7 @@ def calcular_dados_extras(row):
     lucro = vendido - custo
     margem = (lucro / vendido * 100) if vendido > 0 else 0
     
+    # ATUALIZADO: Usando nomes de colunas ORIGINAIS (Real = Real, Orc = Orc)
     hh_orc, hh_real = row['HH_Orc_Qtd'], row['HH_Real_Qtd']
     
     hh_perc = (hh_real / hh_orc * 100) if hh_orc > 0 else 0
@@ -469,6 +477,7 @@ for i, (index, row) in enumerate(df_show.iterrows()):
 
         cor_margem = "#da3633" if row['Margem_%'] < META_MARGEM_BRUTA else "#3fb950"
         
+        # Variáveis padrão (sem inversão)
         hh_real = row['HH_Real_Qtd']
         hh_orc = row['HH_Orc_Qtd']
         
