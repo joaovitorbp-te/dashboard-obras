@@ -8,7 +8,7 @@ import io
 import json
 import os
 import datetime
-import gspread # Adicionado
+import gspread 
 
 # ---------------------------------------------------------
 # 1. ESTILO CSS
@@ -62,8 +62,9 @@ def load_data():
 df_raw = load_data()
 if df_raw is None: st.error("⚠️ Erro ao conectar com o Google Sheets."); st.stop()
 
-# --- LIMPEZA ---
 df_raw.columns = df_raw.columns.str.strip()
+df_raw['Projeto'] = df_raw['Projeto'].astype(str)
+
 def clean_google_number(x):
     if isinstance(x, (int, float)): return float(x)
     if x is None: return 0.0
@@ -116,22 +117,31 @@ custo_total = dados['Mat_Real'] + dados['Desp_Real'] + dados['HH_Real_Vlr'] + da
 lucro_liquido = dados['Vendido'] - custo_total
 margem_real_pct = (lucro_liquido / dados['Vendido']) * 100 if dados['Vendido'] > 0 else 0
 
-# --- CARREGAR METAS (SHEET2) ---
+# --- CARREGAR METAS (SHEET2) - SEM CACHE NO CÓDIGO ---
 @st.cache_data(ttl=30)
 def load_config():
-    default = {"meta_vendas": 5000000.0, "meta_margem": 25.0, "meta_custo_adm": 5.0}
+    # Zeros para evidenciar erro se falhar
+    zeros = {"meta_vendas": 0.0, "meta_margem": 0.0, "meta_custo_adm": 0.0}
     try:
-        gc = gspread.service_account_from_dict(st.secrets["gcp_service_account"])
+        scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+        gc = gspread.service_account_from_dict(st.secrets["gcp_service_account"], scopes=scopes)
         sh = gc.open("dados_dashboard_obras")
         ws = sh.worksheet("Sheet2")
         vals = ws.row_values(2)
         if len(vals) >= 3:
-            def parse(x):
-                clean = str(x).replace("R$", "").replace("%", "").replace(".", "").replace(",", ".").strip()
-                return float(clean) if clean else 0.0
-            return {"meta_vendas": parse(vals[0]), "meta_margem": parse(vals[1]), "meta_custo_adm": parse(vals[2])}
-        return default
-    except: return default
+            def parse_pt_br(x):
+                if isinstance(x, (int, float)): return float(x)
+                clean = str(x).replace("R$", "").replace("%", "").strip()
+                clean = clean.replace(".", "").replace(",", ".")
+                try: return float(clean)
+                except: return 0.0
+            return {
+                "meta_vendas": parse_pt_br(vals[0]),
+                "meta_margem": parse_pt_br(vals[1]),
+                "meta_custo_adm": parse_pt_br(vals[2])
+            }
+        return zeros
+    except: return zeros
 
 config = load_config()
 META_MARGEM_BRUTA = float(config["meta_margem"])
@@ -148,7 +158,7 @@ k1, k2, k3, k4 = st.columns(4)
 with k1: st.markdown(f"""<div class="kpi-card" style="border-top: 4px solid #58a6ff;"><div class="kpi-title">Valor Vendido</div><div class="kpi-val">{format_currency(dados['Vendido'])}</div></div>""", unsafe_allow_html=True)
 with k2: st.markdown(f"""<div class="kpi-card" style="border-top: 4px solid #3fb950;"><div class="kpi-title">Valor Faturado</div><div class="kpi-val">{format_currency(dados['Faturado'])}</div></div>""", unsafe_allow_html=True)
 cor_lucro = "txt-green" if lucro_liquido > 0 else "txt-red"; border_lucro = "#3fb950" if lucro_liquido > 0 else "#da3633"
-with k3: st.markdown(f"""<div class="kpi-card" style="border-top: 4px solid {border_lucro};"><div class="kpi-title">Lucro Líquido</div><div class="kpi-val {cor_lucro}">{format_currency(lucro_liquido)}</div></div>""", unsafe_allow_html=True)
+with k3: st.markdown(f"""<div class="kpi-card" style="border-top: 4px solid #border_lucro;"><div class="kpi-title">Lucro Líquido</div><div class="kpi-val {cor_lucro}">{format_currency(lucro_liquido)}</div></div>""", unsafe_allow_html=True)
 cor_margem = "txt-green" if margem_real_pct >= META_MARGEM_BRUTA else "txt-red"; border_margem = "#3fb950" if margem_real_pct >= META_MARGEM_BRUTA else "#da3633"
 with k4: st.markdown(f"""<div class="kpi-card" style="border-top: 4px solid {border_margem};"><div class="kpi-title">Margem %</div><div class="kpi-val {cor_margem}">{format_percent(margem_real_pct)}</div></div>""", unsafe_allow_html=True)
 
